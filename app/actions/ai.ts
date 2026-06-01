@@ -75,7 +75,7 @@ export async function generateAndSaveWorkoutPlan(params: {
     )
 
     revalidatePath('/app/treino')
-    return { success: true, workoutIds: savedWorkouts.map(w => w.id), plan }
+    return { success: true, workoutIds: savedWorkouts.map((w: { id: string }) => w.id), plan }
   } catch (e) {
     console.error(e)
     return { error: 'Erro ao gerar plano de treino. Tente novamente.' }
