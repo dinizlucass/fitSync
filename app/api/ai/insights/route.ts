@@ -38,13 +38,13 @@ export async function GET(_request: NextRequest) {
   // Calculate weekly stats
   const totalSessions = sessions.length
 
-  const totalVolume = sessions.reduce((sum, session) =>
-    sum + session.sets.reduce((s, set) => s + (set.weightKg ?? 0) * (set.reps ?? 0), 0), 0
+  const totalVolume = sessions.reduce((sum: number, session) =>
+    sum + session.sets.reduce((s: number, set) => s + (set.weightKg ?? 0) * (set.reps ?? 0), 0), 0
   )
 
   const dailyCalories = mealLogs.reduce<Record<string, number>>((acc, log) => {
     const dateStr = log.date.toISOString().split('T')[0]
-    const cals = log.items.reduce((s, item) => {
+    const cals = log.items.reduce((s: number, item) => {
       const ratio = item.quantityG / item.food.servingSize
       return s + item.food.calories * ratio
     }, 0)
