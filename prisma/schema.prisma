@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum GoalType {
+  GAIN_MUSCLE
+  LOSE_FAT
+  RECOMPOSITION
+  MAINTAIN
+}
+
+enum ActivityLevel {
+  SEDENTARY
+  LIGHT
+  MODERATE
+  ACTIVE
+  VERY_ACTIVE
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+  PRE_WORKOUT
+  POST_WORKOUT
+}
+
+model User {
+  id         String   @id @default(cuid())
+  supabaseId String   @unique
+  email      String   @unique
+  name       String?
+  phone      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  profile         Profile?
+  workouts        Workout[]
+  workoutSessions WorkoutSession[]
+  mealLogs        MealLog[]
+  weightLogs      WeightLog[]
+
+  @@map("users")
+}
+
+model Profile {
+  id            String        @id @default(cuid())
+  userId        String        @unique
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalType      GoalType      @default(MAINTAIN)
+  activityLevel ActivityLevel @default(MODERATE)
+  weightKg      Float?
+  heightCm      Float?
+  birthDate     DateTime?
+  sex           String        @default("male")
+  tdee          Float?
+  calorieGoal   Float?
+  proteinGoalG  Float?
+  carbsGoalG    Float?
+  fatGoalG      Float?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("profiles")
+}
+
+model Workout {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  muscleGroups String[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  exercises WorkoutExercise[]
+  sessions  WorkoutSession[]
+
+  @@map("workouts")
+}
+
+model Exercise {
+  id           String   @id @default(cuid())
+  name         String
+  muscleGroup  String
+  equipment    String?
+  instructions String?
+  createdAt    DateTime @default(now())
+
+  workoutExercises WorkoutExercise[]
+  sessionSets      SessionSet[]
+
+  @@map("exercises")
+}
+
+model WorkoutExercise {
+  id         String   @id @default(cuid())
+  workoutId  String
+  workout    Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exerciseId String
+  exercise   Exercise @relation(fields: [exerciseId], references: [id])
+  targetSets Int      @default(3)
+  targetReps Int      @default(10)
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@map("workout_exercises")
+}
+
+model WorkoutSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutId String
+  workout   Workout  @relation(fields: [workoutId], references: [id])
+  notes     String?
+  duration  Int?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  sets SessionSet[]
+
+  @@map("workout_sessions")
+}
+
+model SessionSet {
+  id               String         @id @default(cuid())
+  sessionId        String
+  session          WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  exerciseId       String
+  exercise         Exercise       @relation(fields: [exerciseId], references: [id])
+  setNumber        Int
+  weightKg         Float?
+  reps             Int?
+  isPersonalRecord Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+
+  @@map("session_sets")
+}
+
+model Food {
+  id          String   @id @default(cuid())
+  name        String
+  brand       String?
+  calories    Float
+  proteinG    Float    @default(0)
+  carbsG      Float    @default(0)
+  fatG        Float    @default(0)
+  fiberG      Float    @default(0)
+  servingSize Float    @default(100)
+  servingUnit String   @default("g")
+  createdAt   DateTime @default(now())
+
+  mealItems MealItem[]
+
+  @@unique([name])
+  @@map("foods")
+}
+
+model MealLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime
+  mealType  MealType
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items MealItem[]
+
+  @@map("meal_logs")
+}
+
+model MealItem {
+  id        String  @id @default(cuid())
+  mealLogId String
+  mealLog   MealLog @relation(fields: [mealLogId], references: [id], onDelete: Cascade)
+  foodId    String
+  food      Food    @relation(fields: [foodId], references: [id])
+  quantityG Float
+  createdAt DateTime @default(now())
+
+  @@map("meal_items")
+}
+
+model WeightLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weightKg  Float
+  date      DateTime @default(now())
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@map("weight_logs")
+}

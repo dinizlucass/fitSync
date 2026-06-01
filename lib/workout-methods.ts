@@ -1,0 +1,77 @@
+export const WORKOUT_METHODS = [
+  {
+    id: 'full_body',
+    name: 'Full Body',
+    description: 'Treino do corpo inteiro em cada sessão',
+    days: [2, 3],
+    icon: '💪',
+    splits: { 2: ['Full Body A', 'Full Body B'], 3: ['Full Body A', 'Full Body B', 'Full Body C'] },
+  },
+  {
+    id: 'upper_lower',
+    name: 'Upper / Lower',
+    description: 'Divisão entre superiores e inferiores',
+    days: [4],
+    icon: '⚖️',
+    splits: { 4: ['Upper A', 'Lower A', 'Upper B', 'Lower B'] },
+  },
+  {
+    id: 'ppl',
+    name: 'Push / Pull / Legs',
+    description: 'Empurrar, puxar e pernas',
+    days: [3, 6],
+    icon: '🔄',
+    splits: {
+      3: ['Push', 'Pull', 'Legs'],
+      6: ['Push A', 'Pull A', 'Legs A', 'Push B', 'Pull B', 'Legs B'],
+    },
+  },
+  {
+    id: 'abc',
+    name: 'ABC Clássico',
+    description: 'Peito·Costas·Pernas — 3 dias',
+    days: [3],
+    icon: '🅰️',
+    splits: { 3: ['Treino A — Peito e Tríceps', 'Treino B — Costas e Bíceps', 'Treino C — Pernas e Ombros'] },
+  },
+  {
+    id: 'abcd',
+    name: 'ABCD (4 dias)',
+    description: '4 grupos musculares distintos',
+    days: [4],
+    icon: '4️⃣',
+    splits: {
+      4: [
+        'Treino A — Peito e Tríceps',
+        'Treino B — Costas e Bíceps',
+        'Treino C — Ombros e Abdômen',
+        'Treino D — Pernas',
+      ],
+    },
+  },
+  {
+    id: 'abcde',
+    name: 'Bro Split (5 dias)',
+    description: 'Um músculo por sessão',
+    days: [5],
+    icon: '5️⃣',
+    splits: { 5: ['Peito', 'Costas', 'Ombros', 'Braços', 'Pernas'] },
+  },
+  {
+    id: 'arnold',
+    name: 'Arnold Split',
+    description: 'Método do Arnold Schwarzenegger — 6 dias',
+    days: [6],
+    icon: '🏆',
+    splits: {
+      6: [
+        'Peito e Costas',
+        'Ombros e Braços',
+        'Pernas',
+        'Peito e Costas',
+        'Ombros e Braços',
+        'Pernas',
+      ],
+    },
+  },
+] as const
