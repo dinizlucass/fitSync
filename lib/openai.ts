@@ -268,12 +268,14 @@ export async function generateWorkoutPlan(params: {
   includeCardio: boolean
   cardioGoal?: string
   dailyCalorieGoal?: number
+  volumeLabel: string
+  setsRange: string
 }): Promise<SmartWorkoutPlan> {
   const volumeGuide =
-    params.sessionDuration <= 30 ? '3-4 exercícios, séries enxutas 3x, sem supersets'
-    : params.sessionDuration <= 45 ? '4-5 exercícios, séries 3-4x'
-    : params.sessionDuration <= 60 ? '5-6 exercícios, séries 4x, pode incluir superset'
-    : '7-8 exercícios, séries 4-5x, alto volume, supersets opcionais'
+    params.sessionDuration <= 30 ? `3-4 exercícios, ${params.setsRange} séries, sem supersets`
+    : params.sessionDuration <= 45 ? `4-5 exercícios, ${params.setsRange} séries`
+    : params.sessionDuration <= 60 ? `5-6 exercícios, ${params.setsRange} séries, pode incluir superset`
+    : `7-8 exercícios, ${params.setsRange} séries, alto volume, supersets opcionais`
 
   const cardioInstruction = params.includeCardio
     ? `Inclua 1-2 recomendações de cardio no campo 'cardio'.
@@ -297,7 +299,13 @@ Inclua 1-2 exercícios alternativos por exercício principal.
 Seja específico: exercícios reais adaptados ao nível do aluno.
 Para iniciantes: exercícios básicos, séries 3x, reps 10-15.
 Para intermediários: variações compostas, séries 4x, reps 8-12.
-Para avançados: técnicas avançadas, séries 4-5x, reps 6-12 com variação.`,
+Para avançados: técnicas avançadas, séries 4-5x, reps 6-12 com variação.
+
+CAMPO "methodology" — 3 a 4 dicas 100% sobre COMO executar o treino (falha, RIR, tempo de descanso, cadência, técnicas avançadas). NUNCA dicas genéricas como "beba água" ou "durma bem". Siga estas regras conforme a combinação volume + objetivo:
+- Volume "Baixo" (qualquer objetivo): OBRIGATÓRIO incluir "Leve as últimas 2 séries de cada exercício à falha concêntrica ou 1 RIR para compensar o volume reduzido" e uma dica de tempo de descanso entre séries.
+- Volume "Alto" + Ganho de massa muscular: incluir "Nas primeiras séries conserve 2-3 RIR. Apenas a última série de cada exercício deve ser levada ao limite (0-1 RIR)".
+- Volume "Alto" + Perda de gordura: incluir "Reduza o descanso para 45-60s e considere supersets nos exercícios isoladores para maximizar o gasto calórico".
+- Volume "Moderado" (qualquer objetivo): equilíbrio entre as abordagens acima (parte das séries com 2-3 RIR, últimas próximas da falha, descanso moderado).`,
       },
       {
         role: 'user',
@@ -308,6 +316,7 @@ Para avançados: técnicas avançadas, séries 4-5x, reps 6-12 com variação.`,
 - Nível: ${params.level}
 - Divisões: ${params.splits.join(', ')}
 - Duração da sessão: ${params.sessionDuration} min. ${volumeGuide}.
+- Volume preferido: ${params.volumeLabel} (${params.setsRange} séries por exercício). TODOS os exercícios devem usar ${params.setsRange} séries. Ajuste o número de exercícios para caber em ${params.sessionDuration} min considerando ${params.setsRange} séries e os tempos de descanso.
 
 ${cardioInstruction}
 
@@ -326,6 +335,11 @@ Retorne um JSON EXATO (apenas um treino/dia, não um array de dias):
     }
   ],
   "tips": ["dica 1", "dica 2", "dica 3"],
+  "methodology": [
+    "Nas 2 últimas séries de cada exercício, chegue a 0-1 RIR",
+    "Descanso: 90s em compostos, 60s em isoladores",
+    "Progrida 2.5kg quando completar todas as reps com boa técnica"
+  ],
   "cardio": [
     {
       "type": "HIIT",
@@ -338,7 +352,7 @@ Retorne um JSON EXATO (apenas um treino/dia, não um array de dias):
   ]
 }
 
-Monte para o primeiro dia da divisão (${params.splits[0] ?? 'Treino A'}). Respeite o guia de volume da duração da sessão, com 1-2 alternativas por exercício.`,
+Monte para o primeiro dia da divisão (${params.splits[0] ?? 'Treino A'}). Todos os exercícios com ${params.setsRange} séries e 1-2 alternativas cada. Preencha "methodology" seguindo as regras do volume ${params.volumeLabel}.`,
       },
     ],
     response_format: { type: 'json_object' },

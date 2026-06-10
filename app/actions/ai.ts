@@ -13,7 +13,7 @@ import {
 } from '@/lib/openai'
 import { WORKOUT_METHODS } from '@/lib/workout-methods'
 import type { SmartDietPlan, MealVariant } from '@/lib/diet-types'
-import type { SmartWorkoutPlan, ExerciseAlternative } from '@/lib/workout-types'
+import type { SmartWorkoutPlan, ExerciseAlternative, VolumePreference } from '@/lib/workout-types'
 
 // ─── Generate & Save Workout Plan ─────────────────────────────────────────
 
@@ -24,6 +24,12 @@ const GOAL_LABELS_PT: Record<string, string> = {
   MAINTAIN: 'Manutenção',
 }
 
+const VOLUME_MAP: Record<VolumePreference, { sets: string; setsNum: number; label: string }> = {
+  low:      { sets: '2-3', setsNum: 2, label: 'Baixo' },
+  moderate: { sets: '3-4', setsNum: 3, label: 'Moderado' },
+  high:     { sets: '4-5', setsNum: 4, label: 'Alto' },
+}
+
 export async function generateAndSaveWorkoutPlan(params: {
   methodId: string
   daysPerWeek: number
@@ -31,6 +37,7 @@ export async function generateAndSaveWorkoutPlan(params: {
   level: string
   sessionDuration: number
   includeCardio: boolean
+  volumePreference: VolumePreference
 }): Promise<{ success?: boolean; plan?: SmartWorkoutPlan; error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -59,6 +66,8 @@ export async function generateAndSaveWorkoutPlan(params: {
       includeCardio: params.includeCardio,
       cardioGoal: GOAL_LABELS_PT[dbUser.profile?.goalType ?? 'MAINTAIN'],
       dailyCalorieGoal: dbUser.profile?.calorieGoal ?? undefined,
+      volumeLabel: VOLUME_MAP[params.volumePreference].label,
+      setsRange: VOLUME_MAP[params.volumePreference].sets,
     })
 
     // Save each primary exercise slot to the DB as a single Workout
@@ -145,6 +154,11 @@ export async function generateAutoWorkoutPlan(): Promise<{ plan?: SmartWorkoutPl
   const level = LEVEL_BY_ACTIVITY[profile.activityLevel] ?? 'Intermediário'
   const includeCardio = profile.goalType === 'LOSE_FAT' || profile.goalType === 'RECOMPOSITION'
 
+  const volumePreference: VolumePreference =
+    profile.goalType === 'LOSE_FAT' ? 'low'
+    : profile.goalType === 'GAIN_MUSCLE' ? 'high'
+    : 'moderate'
+
   const method = WORKOUT_METHODS.find(m => m.id === auto.methodId)
   if (!method) return { error: 'Método inválido' }
 
@@ -162,6 +176,8 @@ export async function generateAutoWorkoutPlan(): Promise<{ plan?: SmartWorkoutPl
       includeCardio,
       cardioGoal: goal,
       dailyCalorieGoal: profile.calorieGoal ?? undefined,
+      volumeLabel: VOLUME_MAP[volumePreference].label,
+      setsRange: VOLUME_MAP[volumePreference].sets,
     })
 
     return { plan }

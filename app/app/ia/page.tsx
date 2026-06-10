@@ -16,6 +16,7 @@ import { saveGeneratedWorkout } from '@/app/actions/workout'
 import type { ChatMessage } from '@/lib/openai'
 import type { SmartDietPlan } from '@/lib/diet-types'
 import type { SmartWorkoutPlan } from '@/lib/workout-types'
+import { Suspense } from 'react'
 
 type Tab = 'treino' | 'dieta' | 'chat'
 
@@ -56,6 +57,8 @@ function WorkoutTab() {
   const [goal, setGoal] = useState('Ganho de massa muscular')
   const [level, setLevel] = useState('Intermediário')
   const [sessionDuration, setSessionDuration] = useState(45)
+  const [volumePreference, setVolumePreference] = useState<'low' | 'moderate' | 'high'>('moderate')
+  const [volumeAutoSetDuration, setVolumeAutoSetDuration] = useState(true)
   const [includeCardio, setIncludeCardio] = useState(false)
   const [autoMode, setAutoMode] = useState(false)
   const [plan, setPlan] = useState<SmartWorkoutPlan | null>(null)
@@ -91,6 +94,7 @@ function WorkoutTab() {
         level,
         sessionDuration,
         includeCardio,
+        volumePreference,
       })
       if (res.error) {
         setError(res.error)
@@ -306,7 +310,7 @@ function WorkoutTab() {
             {[30, 45, 60, 90].map(d => (
               <button
                 key={d}
-                onClick={() => setSessionDuration(d)}
+                onClick={() => { setSessionDuration(d); setVolumeAutoSetDuration(false) }}
                 className="px-4 py-3 rounded-xl text-sm font-medium border transition-all"
                 style={{
                   borderColor: sessionDuration === d ? 'var(--color-primary)' : 'var(--color-border)',
@@ -315,6 +319,36 @@ function WorkoutTab() {
                 }}
               >
                 {d} min
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-sm font-medium mb-2">Volume de treino</p>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { id: 'low', icon: '🎯', label: 'Baixo', sets: '2-3 séries', desc: 'Intensidade máx', dur: 45 },
+              { id: 'moderate', icon: '⚖️', label: 'Moderado', sets: '3-4 séries', desc: 'Equilíbrio', dur: 60 },
+              { id: 'high', icon: '💪', label: 'Alto', sets: '4-5 séries', desc: 'Volume máximo', dur: 90 },
+            ] as const).map(v => (
+              <button
+                key={v.id}
+                onClick={() => {
+                  setVolumePreference(v.id)
+                  if (volumeAutoSetDuration) setSessionDuration(v.dur)
+                }}
+                className="p-3 rounded-xl border text-center transition-all"
+                style={{
+                  borderColor: volumePreference === v.id ? 'var(--color-primary)' : 'var(--color-border)',
+                  backgroundColor: volumePreference === v.id ? '#E1F5EE' : 'var(--color-surface)',
+                  color: volumePreference === v.id ? 'var(--color-primary)' : 'inherit',
+                }}
+              >
+                <div className="text-base">{v.icon}</div>
+                <div className="text-sm font-medium mt-1">{v.label}</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{v.sets}</div>
+                <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{v.desc}</div>
               </button>
             ))}
           </div>
@@ -467,27 +501,33 @@ function WorkoutTab() {
                   <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>{displayEx.equipment}</p>
                 </div>
 
-                {/* Alternative chips */}
+                {/* Exercise option selector (primary + alternatives) */}
                 {slot.alternatives.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-3">
-                    <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>ou:</span>
-                    {slot.alternatives.map((alt, altIdx) => (
-                      <button
-                        key={altIdx}
-                        onClick={() => setSelectedExercises(prev => ({
-                          ...prev,
-                          [idx]: selectedExercises[idx] === altIdx ? null : altIdx,
-                        }))}
-                        className="text-xs px-2 py-0.5 rounded-full border transition-all"
-                        style={{
-                          borderColor: selectedExercises[idx] === altIdx ? 'var(--color-primary)' : 'var(--color-border)',
-                          backgroundColor: selectedExercises[idx] === altIdx ? '#E1F5EE' : 'transparent',
-                          color: selectedExercises[idx] === altIdx ? 'var(--color-primary)' : 'inherit',
-                        }}
-                      >
-                        {alt.name}
-                      </button>
-                    ))}
+                    {[slot.primary, ...slot.alternatives].map((opt, optIdx) => {
+                      const currentIdx = selectedExercises[idx]
+                      const isSelected = optIdx === 0
+                        ? (currentIdx === null || currentIdx === undefined)
+                        : currentIdx === optIdx - 1
+                      return (
+                        <button
+                          key={optIdx}
+                          onClick={() => setSelectedExercises(prev => ({
+                            ...prev,
+                            [idx]: optIdx === 0 ? null : optIdx - 1,
+                          }))}
+                          className="text-xs px-3 py-1.5 rounded-full border transition-all"
+                          style={{
+                            borderColor: isSelected ? 'var(--color-primary)' : 'var(--color-border)',
+                            backgroundColor: isSelected ? '#E1F5EE' : 'transparent',
+                            color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                            fontWeight: isSelected ? 500 : 400,
+                          }}
+                        >
+                          {optIdx === 0 ? `✓ ${opt.name}` : opt.name}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
 
@@ -539,6 +579,18 @@ function WorkoutTab() {
             )
           })}
         </div>
+
+        {/* Methodology — how to execute */}
+        {(plan.methodology ?? []).length > 0 && (
+          <div style={{ borderLeft: '3px solid var(--color-primary)', paddingLeft: '12px' }}>
+            <p className="text-sm font-semibold mb-2">📋 Como executar</p>
+            {(plan.methodology ?? []).map((tip, i) => (
+              <p key={i} className="text-sm mb-1" style={{ color: 'var(--color-text-muted)' }}>
+                • {tip}
+              </p>
+            ))}
+          </div>
+        )}
 
         {/* Cardio recommendations */}
         {(plan.cardio ?? []).length > 0 && (
@@ -1186,6 +1238,14 @@ function ChatTab() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function IAPage() {
+  return (
+    <Suspense fallback={<div className="p-6" />}>
+      <IAPageInner />
+    </Suspense>
+  )
+}
+
+function IAPageInner() {
   const [tab, setTab] = useState<Tab>('treino')
   const searchParams = useSearchParams()
 
