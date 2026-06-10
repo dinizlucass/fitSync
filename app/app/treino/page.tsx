@@ -174,13 +174,13 @@ export default function TreinoPage() {
 
                 {/* Confirm delete inline */}
                 {isConfirming ? (
-                  <div className="mb-3 p-3 rounded-lg" style={{ backgroundColor: '#fef2f2' }}>
-                    <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-alert)' }}>Tem certeza?</p>
+                  <div className="mb-3 p-3 rounded-lg border" style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-alert)' }}>
+                    <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-alert)' }}>Tem certeza? Essa ação não pode ser desfeita.</p>
                     <div className="flex gap-2">
                       <button
                         onClick={() => setConfirmDelete(null)}
                         className="flex-1 text-xs py-1.5 rounded-lg border"
-                        style={{ borderColor: 'var(--color-border)' }}
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)', backgroundColor: 'transparent' }}
                       >
                         Cancelar
                       </button>

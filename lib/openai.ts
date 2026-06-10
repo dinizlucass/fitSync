@@ -1,4 +1,6 @@
 import OpenAI from 'openai'
+import type { SmartDietPlan, MealVariant } from '@/lib/diet-types'
+import type { SmartWorkoutPlan, ExerciseAlternative } from '@/lib/workout-types'
 
 let _openai: OpenAI | undefined
 
@@ -262,7 +264,27 @@ export async function generateWorkoutPlan(params: {
   goal: string
   level: string
   splits: string[]
-}): Promise<GeneratedWorkoutPlan> {
+  sessionDuration: number
+  includeCardio: boolean
+  cardioGoal?: string
+  dailyCalorieGoal?: number
+}): Promise<SmartWorkoutPlan> {
+  const volumeGuide =
+    params.sessionDuration <= 30 ? '3-4 exercícios, séries enxutas 3x, sem supersets'
+    : params.sessionDuration <= 45 ? '4-5 exercícios, séries 3-4x'
+    : params.sessionDuration <= 60 ? '5-6 exercícios, séries 4x, pode incluir superset'
+    : '7-8 exercícios, séries 4-5x, alto volume, supersets opcionais'
+
+  const cardioInstruction = params.includeCardio
+    ? `Inclua 1-2 recomendações de cardio no campo 'cardio'.
+Meta calórica diária do usuário: ${params.dailyCalorieGoal ?? 'não informada'} kcal.
+Objetivo: ${params.cardioGoal ?? params.goal}.
+Para 'Perda de gordura': priorize HIIT 2-3x/semana + LISS opcional.
+Para 'Ganho de massa': cardio leve 1-2x/semana para saúde cardiovascular.
+Para 'Manutenção' ou 'Recomposição': LISS moderado 2-3x/semana.
+Em 'caloriesBurn' estime as kcal gastas por sessão de forma realista.`
+    : `O usuário NÃO quer cardio. Retorne "cardio": [] (array vazio).`
+
   const response = await getOpenAI().chat.completions.create({
     model: 'gpt-4o',
     messages: [
@@ -270,8 +292,9 @@ export async function generateWorkoutPlan(params: {
         role: 'system',
         content: `Você é um personal trainer experiente especializado em montagem de treinos.
 Monte um plano de treino completo em português brasileiro.
-Responda APENAS com JSON válido no formato especificado.
-Seja específico: inclua exercícios reais com cargas progressivas adaptadas ao nível do aluno.
+Responda SOMENTE com JSON válido no formato especificado, sem markdown, sem explicações fora do JSON.
+Inclua 1-2 exercícios alternativos por exercício principal.
+Seja específico: exercícios reais adaptados ao nível do aluno.
 Para iniciantes: exercícios básicos, séries 3x, reps 10-15.
 Para intermediários: variações compostas, séries 4x, reps 8-12.
 Para avançados: técnicas avançadas, séries 4-5x, reps 6-12 com variação.`,
@@ -284,30 +307,38 @@ Para avançados: técnicas avançadas, séries 4-5x, reps 6-12 com variação.`,
 - Objetivo: ${params.goal}
 - Nível: ${params.level}
 - Divisões: ${params.splits.join(', ')}
+- Duração da sessão: ${params.sessionDuration} min. ${volumeGuide}.
 
-Retorne um JSON no formato:
+${cardioInstruction}
+
+Retorne um JSON EXATO (apenas um treino/dia, não um array de dias):
 {
-  "method": "${params.methodName}",
-  "days": [
+  "name": "${params.methodName} - ${params.splits[0] ?? 'Treino'}",
+  "duration": "${params.sessionDuration} min",
+  "exercises": [
     {
-      "name": "nome da divisão (ex: Treino A - Peito e Tríceps)",
-      "muscleGroups": ["peito", "triceps"],
-      "exercises": [
-        {
-          "name": "nome do exercício",
-          "muscleGroup": "grupo muscular principal",
-          "targetSets": 4,
-          "targetReps": 10,
-          "restSeconds": 90,
-          "notes": "dica de execução (opcional)"
-        }
+      "muscleGroup": "Peitoral",
+      "primary": { "name": "Supino reto com barra", "sets": 4, "reps": "8-10", "rest": "90s", "equipment": "Barra", "notes": "dica de execução" },
+      "alternatives": [
+        { "name": "Supino com halteres", "sets": 4, "reps": "8-10", "rest": "90s", "equipment": "Halteres" },
+        { "name": "Flexão com pés elevados", "sets": 4, "reps": "12-15", "rest": "60s", "equipment": "Peso corporal" }
       ]
     }
   ],
-  "tips": ["dica geral 1", "dica geral 2", "dica geral 3"]
+  "tips": ["dica 1", "dica 2", "dica 3"],
+  "cardio": [
+    {
+      "type": "HIIT",
+      "description": "30s sprint / 30s descanso, 8 rounds na esteira",
+      "durationMin": 20,
+      "frequency": "2x por semana",
+      "caloriesBurn": 220,
+      "bestFor": "Queima de gordura preservando massa muscular"
+    }
+  ]
 }
 
-Monte ${params.daysPerWeek} dias de treino. Cada dia deve ter 4-6 exercícios.`,
+Monte para o primeiro dia da divisão (${params.splits[0] ?? 'Treino A'}). Respeite o guia de volume da duração da sessão, com 1-2 alternativas por exercício.`,
       },
     ],
     response_format: { type: 'json_object' },
@@ -316,7 +347,49 @@ Monte ${params.daysPerWeek} dias de treino. Cada dia deve ter 4-6 exercícios.`,
 
   const content = response.choices[0].message.content
   if (!content) throw new Error('No response from OpenAI')
-  return JSON.parse(content) as GeneratedWorkoutPlan
+  return JSON.parse(content) as SmartWorkoutPlan
+}
+
+export async function refineExercise(params: {
+  exerciseName: string
+  sets: number
+  reps: string
+  muscleGroup: string
+  userMessage: string
+}): Promise<ExerciseAlternative & { explanation: string }> {
+  const response = await getOpenAI().chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'system',
+        content: 'Você é um personal trainer. Sugira um exercício substituto conforme o pedido. Mantenha volume similar. Responda SOMENTE com JSON válido.',
+      },
+      {
+        role: 'user',
+        content: `Exercício atual: ${params.exerciseName}
+Grupo muscular: ${params.muscleGroup}
+Séries: ${params.sets} | Repetições: ${params.reps}
+Pedido do usuário: ${params.userMessage}
+
+Retorne JSON EXATO:
+{
+  "name": "nome do exercício substituto",
+  "sets": ${params.sets},
+  "reps": "${params.reps}",
+  "rest": "90s",
+  "equipment": "equipamento necessário",
+  "notes": "dica opcional",
+  "explanation": "motivo da substituição (máx 70 chars)"
+}`,
+      },
+    ],
+    response_format: { type: 'json_object' },
+    temperature: 0.7,
+  })
+
+  const content = response.choices[0].message.content
+  if (!content) throw new Error('No response from OpenAI')
+  return JSON.parse(content) as ExerciseAlternative & { explanation: string }
 }
 
 // ─── Diet Plan Generation ──────────────────────────────────────────────────
@@ -352,7 +425,7 @@ export interface GeneratedDietPlan {
   substitutions: string[]
 }
 
-export async function generateDietPlan(params: {
+export async function generateSmartDietPlan(params: {
   calories: number
   proteinG: number
   carbsG: number
@@ -360,76 +433,163 @@ export async function generateDietPlan(params: {
   goal: string
   preferences: string[]
   mealsPerDay: number
-}): Promise<GeneratedDietPlan> {
-  const prefText = params.preferences.length > 0
-    ? `Restrições/preferências: ${params.preferences.join(', ')}.`
-    : 'Sem restrições alimentares.'
+  weight?: number
+  height?: number
+}): Promise<SmartDietPlan> {
+  // Pre-calculate per-meal calorie targets so the AI has concrete numbers to hit
+  const mealDistributions: Record<number, number[]> = {
+    3: [30, 40, 30],
+    4: [25, 35, 25, 15],
+    5: [20, 10, 35, 15, 20],
+    6: [20, 10, 30, 10, 20, 10],
+  }
+  const mealNames: Record<number, string[]> = {
+    3: ['Café da manhã', 'Almoço', 'Jantar'],
+    4: ['Café da manhã', 'Almoço', 'Lanche da tarde', 'Jantar'],
+    5: ['Café da manhã', 'Lanche da manhã', 'Almoço', 'Lanche da tarde', 'Jantar'],
+    6: ['Café da manhã', 'Lanche da manhã', 'Almoço', 'Lanche da tarde', 'Jantar', 'Ceia'],
+  }
+  const mealTimes: Record<number, string[]> = {
+    3: ['07:00', '12:30', '19:00'],
+    4: ['07:00', '12:30', '15:30', '19:00'],
+    5: ['07:00', '10:00', '12:30', '15:30', '19:00'],
+    6: ['07:00', '10:00', '12:30', '15:30', '19:00', '21:30'],
+  }
+
+  const n = params.mealsPerDay
+  const distributions = mealDistributions[n] ?? mealDistributions[5]
+  const names = mealNames[n] ?? mealNames[5]
+  const times = mealTimes[n] ?? mealTimes[5]
+
+  const mealTargets = distributions.map((pct, i) => ({
+    name: names[i],
+    time: times[i],
+    targetCalories: Math.round(params.calories * pct / 100),
+    targetProteinG: Math.round(params.proteinG * pct / 100),
+    targetCarbsG: Math.round(params.carbsG * pct / 100),
+    targetFatG: Math.round(params.fatG * pct / 100),
+  }))
+
+  const mealTargetLines = mealTargets
+    .map(m => `  - ${m.name} (${m.time}): ${m.targetCalories} kcal | P:${m.targetProteinG}g C:${m.targetCarbsG}g G:${m.targetFatG}g`)
+    .join('\n')
 
   const response = await getOpenAI().chat.completions.create({
     model: 'gpt-4o',
     messages: [
       {
         role: 'system',
-        content: `Você é um nutricionista esportivo especializado em dietas para praticantes de musculação.
-Monte cardápios usando alimentos comuns no Brasil, baseado na tabela TACO.
-Use alimentos acessíveis e práticos. Varie os alimentos entre os dias.
-Responda APENAS com JSON válido no formato especificado.`,
+        content: `Você é um nutricionista esportivo brasileiro. Gere um cardápio diário personalizado.
+Responda SOMENTE com JSON válido, sem markdown, sem explicações fora do JSON.
+REGRA ABSOLUTA: cada refeição DEVE bater exatamente o alvo calórico indicado (±5%). Calcule os itens e porções para atingir o número exato antes de retornar.`,
       },
       {
         role: 'user',
-        content: `Monte um plano alimentar de 7 dias com as seguintes metas diárias:
-- Calorias: ${params.calories} kcal
-- Proteína: ${params.proteinG}g
-- Carboidratos: ${params.carbsG}g
-- Gordura: ${params.fatG}g
-- Objetivo: ${params.goal}
-- Refeições por dia: ${params.mealsPerDay}
-- ${prefText}
+        content: `Crie um cardápio diário com base no perfil:
 
-Retorne um JSON no formato:
+META CALÓRICA DIÁRIA: ${params.calories} kcal (objetivo: ${params.goal})
+MACROS: Proteína ${params.proteinG}g | Carboidratos ${params.carbsG}g | Gordura ${params.fatG}g
+${params.weight ? `Peso: ${params.weight}kg` : ''}${params.height ? ` | Altura: ${params.height}cm` : ''}
+Restrições: ${params.preferences.length > 0 ? params.preferences.join(', ') : 'nenhuma'}
+
+ALVOS OBRIGATÓRIOS POR REFEIÇÃO (você DEVE bater esses valores ±5%):
+${mealTargetLines}
+
+Para cada refeição, gere 3 variantes (Opção A, B, C) que batem o mesmo alvo calórico com alimentos diferentes.
+
+Retorne JSON:
 {
-  "days": [
+  "meals": [
     {
-      "totalCalories": número,
-      "totalProteinG": número,
-      "totalCarbsG": número,
-      "totalFatG": número,
-      "meals": [
+      "name": "${names[0]}",
+      "time": "${times[0]}",
+      "variants": [
         {
-          "name": "Café da manhã",
-          "time": "07:00",
+          "label": "Opção A",
+          "tagline": "tagline curta",
           "items": [
-            {
-              "food": "Ovo mexido",
-              "quantity": "3 unidades (150g)",
-              "calories": 210,
-              "proteinG": 18,
-              "carbsG": 2,
-              "fatG": 15
-            }
+            { "food": "nome", "quantity": "quantidade", "calories": N, "proteinG": N, "carbsG": N, "fatG": N }
           ],
-          "totalCalories": número,
-          "totalProteinG": número,
-          "totalCarbsG": número,
-          "totalFatG": número
-        }
+          "totalCalories": ${mealTargets[0]?.targetCalories ?? 0},
+          "totalProteinG": N, "totalCarbsG": N, "totalFatG": N
+        },
+        { "label": "Opção B", ... },
+        { "label": "Opção C", ... }
       ]
     }
   ],
-  "tips": ["dica nutricional 1", "dica 2", "dica 3"],
-  "substitutions": ["frango pode ser substituído por atum", "arroz pode ser substituído por batata doce"]
+  "tips": ["dica 1", "dica 2", "dica 3"]
 }
 
-Monte exatamente 7 dias variados. Cada dia deve ter ${params.mealsPerDay} refeições.`,
+REGRAS:
+- Gere exatamente ${n} refeições na ordem dos alvos acima
+- Sempre 3 variantes completas por refeição — nunca arrays vazios
+- Cada variante deve bater o mesmo alvo calórico da refeição (±5%)
+- Use alimentos comuns no Brasil (tabela TACO)
+- Taglines curtas (máx 3 palavras)
+- Nunca repita o mesmo alimento principal entre variantes da mesma refeição`,
       },
     ],
     response_format: { type: 'json_object' },
-    temperature: 0.8,
+    temperature: 0.7,
   })
 
   const content = response.choices[0].message.content
   if (!content) throw new Error('No response from OpenAI')
-  return JSON.parse(content) as GeneratedDietPlan
+  return JSON.parse(content) as SmartDietPlan
+}
+
+export async function refineMealVariant(params: {
+  mealName: string
+  currentVariant: MealVariant
+  userMessage: string
+}): Promise<MealVariant & { explanation: string }> {
+  const response = await getOpenAI().chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      {
+        role: 'system',
+        content: `Você é um nutricionista esportivo. Ajuste uma variante de refeição conforme o pedido do usuário.
+REGRA ABSOLUTA: a nova variante DEVE ter exatamente o mesmo total calórico da variante original (±5%). Ajuste as porções para bater o número exato.
+Use alimentos comuns no Brasil (tabela TACO). Responda SOMENTE com JSON válido.`,
+      },
+      {
+        role: 'user',
+        content: `Refeição: ${params.mealName}
+Variante atual: ${params.currentVariant.label} — "${params.currentVariant.tagline}"
+
+Itens atuais:
+${params.currentVariant.items.map(i => `- ${i.food} (${i.quantity}): ${i.calories} kcal | P:${i.proteinG}g C:${i.carbsG}g G:${i.fatG}g`).join('\n')}
+
+ALVO OBRIGATÓRIO: ${params.currentVariant.totalCalories} kcal ±5% (ou seja, entre ${Math.round(params.currentVariant.totalCalories * 0.95)} e ${Math.round(params.currentVariant.totalCalories * 1.05)} kcal)
+Proteína atual: ${params.currentVariant.totalProteinG}g — mantenha próximo desse valor.
+
+Pedido do usuário: "${params.userMessage}"
+
+Ajuste os alimentos conforme o pedido e calibre as porções para bater ${params.currentVariant.totalCalories} kcal.
+
+Retorne JSON:
+{
+  "label": "${params.currentVariant.label}",
+  "tagline": "nova tagline (máx 3 palavras)",
+  "items": [
+    { "food": "nome", "quantity": "quantidade", "calories": N, "proteinG": N, "carbsG": N, "fatG": N }
+  ],
+  "totalCalories": ${params.currentVariant.totalCalories},
+  "totalProteinG": N,
+  "totalCarbsG": N,
+  "totalFatG": N,
+  "explanation": "motivo do ajuste (máx 70 chars)"
+}`,
+      },
+    ],
+    response_format: { type: 'json_object' },
+    temperature: 0.7,
+  })
+
+  const content = response.choices[0].message.content
+  if (!content) throw new Error('No response from OpenAI')
+  return JSON.parse(content) as MealVariant & { explanation: string }
 }
 
 // ─── AI Coach Chat ─────────────────────────────────────────────────────────

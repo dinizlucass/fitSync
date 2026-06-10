@@ -119,7 +119,11 @@ export default function TreinoSessionPage({ params }: { params: Promise<{ id: st
     async function loadWorkout() {
       try {
         const res = await fetch(`/api/workouts/${id}`)
-        if (!res.ok) throw new Error('Treino não encontrado')
+        if (!res.ok) {
+          const body = await res.json().catch(() => null)
+          console.error(`[treino/${id}] API ${res.status}:`, body)
+          throw new Error(body?.error ?? `Erro ${res.status} ao carregar treino`)
+        }
         const data = await res.json()
         setWorkout(data.workout)
         setExercises(
@@ -141,8 +145,9 @@ export default function TreinoSessionPage({ params }: { params: Promise<{ id: st
             })),
           }))
         )
-      } catch {
-        setError('Erro ao carregar treino.')
+      } catch (e) {
+        console.error(`[treino/${id}] load failed:`, e)
+        setError(e instanceof Error ? e.message : 'Erro ao carregar treino.')
       } finally {
         setLoading(false)
       }

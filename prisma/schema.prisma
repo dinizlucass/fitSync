@@ -44,6 +44,7 @@ model User {
   workoutSessions WorkoutSession[]
   mealLogs        MealLog[]
   weightLogs      WeightLog[]
+  dietTemplate    DietTemplate?
 
   @@map("users")
 }
@@ -156,10 +157,48 @@ model Food {
   servingUnit String   @default("g")
   createdAt   DateTime @default(now())
 
-  mealItems MealItem[]
+  mealItems         MealItem[]
+  dietTemplateItems DietTemplateMealItem[]
 
   @@unique([name])
   @@map("foods")
+}
+
+model DietTemplate {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String   @default("Cardápio padrão")
+  calorieGoal Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  meals DietTemplateMeal[]
+
+  @@map("diet_templates")
+}
+
+model DietTemplateMeal {
+  id         String       @id @default(cuid())
+  templateId String
+  template   DietTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  mealType   MealType
+  mealName   String       @default("")
+
+  items DietTemplateMealItem[]
+
+  @@map("diet_template_meals")
+}
+
+model DietTemplateMealItem {
+  id        String           @id @default(cuid())
+  mealId    String
+  meal      DietTemplateMeal @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  foodId    String
+  food      Food             @relation(fields: [foodId], references: [id])
+  quantityG Float
+
+  @@map("diet_template_meal_items")
 }
 
 model MealLog {

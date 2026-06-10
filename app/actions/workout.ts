@@ -183,6 +183,60 @@ export async function updateWorkout(data: {
   }
 }
 
+export async function saveGeneratedWorkout(params: {
+  name: string
+  muscleGroups: string[]
+  exercises: Array<{
+    name: string
+    muscleGroup: string
+    sets: number
+    reps: string
+  }>
+}): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Não autenticado' }
+
+  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
+  if (!dbUser) return { success: false, error: 'Usuário não encontrado' }
+
+  try {
+    const exerciseRecords = await Promise.all(
+      params.exercises.map(async (ex) => {
+        let exercise = await prisma.exercise.findFirst({ where: { name: ex.name } })
+        if (!exercise) {
+          exercise = await prisma.exercise.create({
+            data: { name: ex.name, muscleGroup: ex.muscleGroup },
+          })
+        }
+        return { ...ex, exerciseId: exercise.id }
+      })
+    )
+
+    await prisma.workout.create({
+      data: {
+        userId: dbUser.id,
+        name: params.name,
+        muscleGroups: params.muscleGroups,
+        exercises: {
+          create: exerciseRecords.map((ex, i) => ({
+            exerciseId: ex.exerciseId,
+            targetSets: ex.sets,
+            targetReps: parseInt(ex.reps.split('-')[0], 10) || 10,
+            order: i,
+          })),
+        },
+      },
+    })
+
+    revalidatePath('/app/treino')
+    return { success: true }
+  } catch (e) {
+    console.error(e)
+    return { success: false, error: 'Erro ao salvar treino' }
+  }
+}
+
 export async function deleteWorkout(workoutId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import ProfileGoalsEditor from '@/components/profile/ProfileGoalsEditor'
 
 export default async function ConfiguracoesPage() {
   const supabase = await createClient()
@@ -13,7 +14,7 @@ export default async function ConfiguracoesPage() {
     include: { profile: true },
   }).catch(() => null)
 
-  if (!dbUser) redirect('/app/hoje')
+  if (!dbUser) redirect('/app/dieta')
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto">
@@ -47,35 +48,14 @@ export default async function ConfiguracoesPage() {
         </div>
       </div>
 
-      {/* Goals summary */}
-      {dbUser.profile && (
-        <div className="rounded-xl p-5 mb-4" style={{ backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-card)' }}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-medium">Metas e objetivos</h2>
-            <Link href="/app/configuracoes/metas" className="text-xs" style={{ color: 'var(--color-primary)' }}>
-              Editar
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: 'Objetivo', value: {
-                GAIN_MUSCLE: 'Ganhar massa',
-                LOSE_FAT: 'Perder gordura',
-                RECOMPOSITION: 'Recomposição',
-                MAINTAIN: 'Manter peso',
-              }[dbUser.profile.goalType] ?? dbUser.profile.goalType },
-              { label: 'Meta calórica', value: dbUser.profile.calorieGoal ? `${Math.round(dbUser.profile.calorieGoal)} kcal` : '—' },
-              { label: 'Proteína', value: dbUser.profile.proteinGoalG ? `${Math.round(dbUser.profile.proteinGoalG)}g` : '—' },
-              { label: 'Peso atual', value: dbUser.profile.weightKg ? `${dbUser.profile.weightKg} kg` : '—' },
-            ].map(item => (
-              <div key={item.label} className="p-3 rounded-lg" style={{ backgroundColor: 'var(--color-surface)' }}>
-                <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>{item.label}</p>
-                <p className="text-sm font-medium">{item.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Goals — inline editable client component */}
+      <ProfileGoalsEditor
+        name={dbUser.name}
+        goalType={dbUser.profile?.goalType ?? 'MAINTAIN'}
+        calorieGoal={dbUser.profile?.calorieGoal ?? null}
+        proteinGoalG={dbUser.profile?.proteinGoalG ?? null}
+        weightKg={dbUser.profile?.weightKg ?? null}
+      />
 
       {/* Links */}
       <div className="rounded-xl border" style={{ backgroundColor: 'var(--color-background)', borderColor: 'var(--color-border)', borderRadius: 'var(--radius-card)' }}>
