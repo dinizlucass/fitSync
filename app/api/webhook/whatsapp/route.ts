@@ -1,7 +1,27 @@
 import { NextRequest } from 'next/server'
+import crypto from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { sendWhatsAppMessage, downloadMetaMedia } from '@/lib/whatsapp'
 import { parseWorkoutMessage, parseMealMessage, analyzeFoodImage } from '@/lib/openai'
+
+/**
+ * Verifica a assinatura HMAC-SHA256 do corpo bruto contra o header
+ * X-Hub-Signature-256 enviado pela Meta. Usa comparação timing-safe.
+ */
+function verifyMetaSignature(rawBody: string, signatureHeader: string | null): boolean {
+  const appSecret = process.env.META_APP_SECRET
+  if (!appSecret || !signatureHeader) return false
+
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', appSecret)
+    .update(rawBody, 'utf8')
+    .digest('hex')
+
+  const a = Buffer.from(signatureHeader)
+  const b = Buffer.from(expected)
+  if (a.length !== b.length) return false
+  return crypto.timingSafeEqual(a, b)
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -18,7 +38,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const rawBody = await request.text()
+
+    if (!verifyMetaSignature(rawBody, request.headers.get('x-hub-signature-256'))) {
+      return Response.json({ error: 'Invalid signature' }, { status: 401 })
+    }
+
+    const body = JSON.parse(rawBody)
 
     const entry = body.entry?.[0]
     const changes = entry?.changes?.[0]

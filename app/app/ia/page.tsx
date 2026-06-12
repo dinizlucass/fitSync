@@ -1222,6 +1222,7 @@ function ChatTab() {
           disabled={!input.trim() || isPending}
           className="w-10 h-10 rounded-xl flex items-center justify-center text-white transition-all disabled:opacity-50"
           style={{ backgroundColor: 'var(--color-primary)' }}
+          aria-label="Enviar mensagem"
         >
           {isPending ? <Spinner /> : (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

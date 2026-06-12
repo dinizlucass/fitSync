@@ -80,7 +80,7 @@ export default function TreinoPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-medium">Meus Treinos</h1>
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{workouts.length} treino(s) criado(s)</p>
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{workouts.length} {workouts.length === 1 ? 'treino criado' : 'treinos criados'}</p>
         </div>
         <Link
           href="/app/treino/novo"
@@ -140,6 +140,9 @@ export default function TreinoPage() {
                       onClick={e => { e.stopPropagation(); setOpenMenu(isMenuOpen ? null : workout.id); setConfirmDelete(null) }}
                       className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
                       style={{ color: 'var(--color-text-muted)' }}
+                      aria-label="Opções do treino"
+                      aria-haspopup="menu"
+                      aria-expanded={isMenuOpen}
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                         <circle cx="12" cy="5" r="1.5"/>
@@ -199,7 +202,7 @@ export default function TreinoPage() {
                 <Link href={`/app/treino/${workout.id}`} className="block group">
                   <h3 className="text-sm font-medium mb-1 group-hover:underline">{workout.name}</h3>
                   <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
-                    {workout.exercises.length} exercício(s)
+                    {workout.exercises.length} {workout.exercises.length === 1 ? 'exercício' : 'exercícios'}
                   </p>
                   {muscleGroups.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-3">

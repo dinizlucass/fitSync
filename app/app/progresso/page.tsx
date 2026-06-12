@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import WeightChart from '@/components/charts/WeightChart'
 import LoadChart from '@/components/charts/LoadChart'
 import { logWeight } from '@/app/actions/weight'
@@ -79,28 +80,28 @@ function TrainingHeatmap({ trainingDays, period }: { trainingDays: string[]; per
   return (
     <div className="rounded-xl p-5 mb-4" style={{ backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-card)' }}>
       <h2 className="text-sm font-medium mb-4">Frequência de treinos</h2>
-      <div className="flex gap-1 overflow-x-auto pb-2">
+      <div className="flex gap-1.5 overflow-x-auto pb-2">
         {/* Day-of-week labels column */}
-        <div className="flex flex-col gap-0.5 mr-1" style={{ paddingTop: '18px' }}>
+        <div className="flex flex-col gap-1 mr-1" style={{ paddingTop: '20px' }}>
           {DAY_LABELS.map((l, i) => (
-            <div key={i} className="text-xs flex items-center justify-center" style={{ width: '12px', height: '12px', color: 'var(--color-text-muted)', fontSize: '9px' }}>
+            <div key={i} className="flex items-center justify-center" style={{ width: '15px', height: '15px', color: 'var(--color-text-muted)', fontSize: '10px' }}>
               {l}
             </div>
           ))}
         </div>
         {/* Weeks */}
-        <div className="flex gap-0.5">
+        <div className="flex gap-1">
           {weeks.map((week, wi) => {
             const monthLabel = getMonthLabel(week)
             return (
-              <div key={wi} className="flex flex-col gap-0.5">
+              <div key={wi} className="flex flex-col gap-1">
                 {/* Month label */}
-                <div className="text-center" style={{ height: '16px', fontSize: '9px', color: 'var(--color-text-muted)' }}>
+                <div className="text-center" style={{ height: '16px', fontSize: '10px', color: 'var(--color-text-muted)' }}>
                   {monthLabel ?? ''}
                 </div>
                 {week.map((day, di) => {
                   if (day === null) {
-                    return <div key={di} style={{ width: '12px', height: '12px' }} />
+                    return <div key={di} style={{ width: '15px', height: '15px' }} />
                   }
                   const hasSession = trainingSet.has(day)
                   const isToday = day === todayStr
@@ -109,9 +110,9 @@ function TrainingHeatmap({ trainingDays, period }: { trainingDays: string[]; per
                       key={di}
                       title={day}
                       style={{
-                        width: '12px',
-                        height: '12px',
-                        borderRadius: '2px',
+                        width: '15px',
+                        height: '15px',
+                        borderRadius: '3px',
                         backgroundColor: hasSession ? 'var(--color-primary)' : 'var(--color-surface)',
                         outline: isToday ? '2px solid var(--color-primary)' : 'none',
                         outlineOffset: isToday ? '1px' : '0',
@@ -130,9 +131,9 @@ function TrainingHeatmap({ trainingDays, period }: { trainingDays: string[]; per
           <div
             key={v}
             style={{
-              width: '12px',
-              height: '12px',
-              borderRadius: '2px',
+              width: '15px',
+              height: '15px',
+              borderRadius: '3px',
               backgroundColor: v === 0 ? 'var(--color-surface)' : 'var(--color-primary)',
             }}
           />
@@ -315,12 +316,23 @@ export default function ProgressoPage() {
       {/* Weight chart */}
       <div className="rounded-xl p-5 mb-4" style={{ backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-card)' }}>
         <h2 className="text-sm font-medium mb-4">Evolução do peso</h2>
-        {data && data.weightHistory.length > 0 ? (
+        {data && data.weightHistory.length > 1 ? (
           <WeightChart data={data.weightHistory} />
         ) : (
-          <p className="text-sm text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
-            Nenhum registro de peso no período
-          </p>
+          <div className="flex flex-col items-center gap-3 py-8">
+            <p className="text-sm text-center" style={{ color: 'var(--color-text-muted)' }}>
+              {data && data.weightHistory.length === 1
+                ? 'Registre seu peso mais vezes para ver a evolução'
+                : 'Nenhum registro de peso no período'}
+            </p>
+            <button
+              onClick={() => setShowWeightModal(true)}
+              className="text-xs px-3 py-1.5 rounded-lg text-white font-medium"
+              style={{ backgroundColor: 'var(--color-primary)' }}
+            >
+              + Registrar peso
+            </button>
+          </div>
         )}
       </div>
 
@@ -348,9 +360,18 @@ export default function ProgressoPage() {
         ) : loadHistory.length > 0 ? (
           <LoadChart data={loadHistory} />
         ) : (
-          <p className="text-sm text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
-            Sem dados de carga no período
-          </p>
+          <div className="flex flex-col items-center gap-3 py-8">
+            <p className="text-sm text-center" style={{ color: 'var(--color-text-muted)' }}>
+              Sem dados de carga no período
+            </p>
+            <Link
+              href="/app/treino"
+              className="text-xs px-3 py-1.5 rounded-lg text-white font-medium"
+              style={{ backgroundColor: 'var(--color-primary)' }}
+            >
+              Registrar um treino
+            </Link>
+          </div>
         )}
       </div>
 

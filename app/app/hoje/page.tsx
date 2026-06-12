@@ -275,7 +275,7 @@ export default async function HojePage() {
               <div className="flex-1">
                 <p className="text-sm font-medium group-hover:underline">{suggestedWorkout.name}</p>
                 <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                  {suggestedWorkout.exercises.length} exercícios
+                  {suggestedWorkout.exercises.length} {suggestedWorkout.exercises.length === 1 ? 'exercício' : 'exercícios'}
                   {suggestedWorkout.muscleGroups.length > 0 && ` • ${suggestedWorkout.muscleGroups.slice(0, 2).join(', ')}`}
                 </p>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
@@ -297,7 +297,7 @@ export default async function HojePage() {
           {sessions.length > 0 && (
             <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
               <p className="text-xs" style={{ color: 'var(--color-primary)' }}>
-                ✓ {sessions.length} treino(s) concluído(s) hoje
+                ✓ {sessions.length} {sessions.length === 1 ? 'treino concluído' : 'treinos concluídos'} hoje
               </p>
             </div>
           )}

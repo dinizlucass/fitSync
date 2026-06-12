@@ -226,7 +226,7 @@ export default function DietaPage() {
 
   const macros = [
     { label: 'Proteína', val: totalProtein, goal: data?.proteinGoal ?? 0, color: 'var(--color-primary)' },
-    { label: 'Carbs',    val: totalCarbs,   goal: data?.carbsGoal ?? 0,   color: '#378ADD' },
+    { label: 'Carbos',   val: totalCarbs,   goal: data?.carbsGoal ?? 0,   color: '#378ADD' },
     { label: 'Gordura',  val: totalFat,     goal: data?.fatGoal ?? 0,     color: '#EF9F27' },
   ]
 
@@ -496,7 +496,7 @@ export default function DietaPage() {
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                       </svg>
-                      Add
+                      Adicionar
                     </button>
                     {hasItems && (
                       <button

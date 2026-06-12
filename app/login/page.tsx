@@ -6,6 +6,19 @@ import { createClient } from '@/lib/supabase/client'
 
 type Tab = 'login' | 'signup'
 
+function traduzirErroAuth(msg: string): string {
+  const m = msg.toLowerCase()
+  if (m.includes('invalid login credentials')) return 'Email ou senha incorretos. Verifique seus dados.'
+  if (m.includes('already registered') || m.includes('already been registered')) return 'Este email já está cadastrado. Faça login.'
+  if (m.includes('email not confirmed')) return 'Confirme seu email antes de entrar. Verifique sua caixa de entrada.'
+  if (m.includes('password should be at least')) return 'A senha deve ter no mínimo 6 caracteres.'
+  if (m.includes('unable to validate email') || m.includes('invalid email')) return 'Email inválido. Verifique o endereço digitado.'
+  if (m.includes('rate limit') || m.includes('too many requests')) return 'Muitas tentativas. Aguarde alguns instantes e tente novamente.'
+  if (m.includes('user not found')) return 'Conta não encontrada. Verifique o email ou crie uma conta.'
+  if (m.includes('network')) return 'Erro de conexão. Verifique sua internet e tente novamente.'
+  return 'Ocorreu um erro. Tente novamente.'
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('login')
@@ -27,7 +40,7 @@ export default function LoginPage() {
     if (tab === 'login') {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
-        setError('Email ou senha incorretos. Verifique seus dados.')
+        setError(traduzirErroAuth(error.message))
       } else {
         router.push('/app/hoje')
         router.refresh()
@@ -41,11 +54,7 @@ export default function LoginPage() {
         },
       })
       if (error) {
-        if (error.message.includes('already registered')) {
-          setError('Este email já está cadastrado. Faça login.')
-        } else {
-          setError(error.message)
-        }
+        setError(traduzirErroAuth(error.message))
       } else {
         setMessage('Conta criada! Verifique seu email para confirmar o cadastro.')
       }

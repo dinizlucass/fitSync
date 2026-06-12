@@ -40,9 +40,11 @@ function RestTimerBanner({
 
   return (
     <div
-      className="fixed bottom-16 md:bottom-4 left-1/2 z-40 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg"
+      className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg"
+      role="timer"
+      aria-live="polite"
+      aria-label={`Descanso: ${display}`}
       style={{
-        transform: 'translateX(-50%)',
         backgroundColor: 'var(--color-background)',
         border: '1px solid var(--color-border)',
       }}

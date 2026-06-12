@@ -400,7 +400,7 @@ export default function LandingPage() {
             <span style={{ color: 'var(--color-primary)' }}>Sync</span>
           </span>
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            © 2025 FitSync. Todos os direitos reservados.
+            © {new Date().getFullYear()} FitSync. Todos os direitos reservados.
           </p>
           <div className="flex gap-4">
             {['Privacidade', 'Termos', 'Contato'].map(link => (

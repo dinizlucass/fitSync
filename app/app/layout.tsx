@@ -121,7 +121,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="px-3 py-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
           <div className="flex items-center gap-3 px-3 py-2 mb-1">
             <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium" style={{ backgroundColor: 'var(--color-primary)' }}>
-              {user?.email?.[0]?.toUpperCase() ?? 'U'}
+              {(user?.user_metadata?.name?.[0] ?? user?.email?.[0])?.toUpperCase() ?? 'U'}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium truncate">{user?.user_metadata?.name || 'Usuário'}</p>

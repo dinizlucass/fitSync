@@ -1,15 +1,17 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { startOfDay, endOfDay } from 'date-fns'
+import { startOfDay, endOfDay, format } from 'date-fns'
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const dateStr = request.nextUrl.searchParams.get('date') ?? new Date().toISOString().split('T')[0]
-  const date = new Date(dateStr)
+  const localToday = format(new Date(), 'yyyy-MM-dd')
+  const dateStr = request.nextUrl.searchParams.get('date') ?? localToday
+  // Ancora ao meio-dia local para evitar que o dia "vire" ao converter para UTC
+  const date = new Date(dateStr + 'T12:00:00')
 
   const dbUser = await prisma.user.findUnique({
     where: { supabaseId: user.id },

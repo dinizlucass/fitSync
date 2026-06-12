@@ -146,7 +146,7 @@ export default function FoodSearchModal({ mealType, date, onClose, onAdded }: Fo
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
           <h2 className="text-sm font-medium">Adicionar alimento</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--color-surface)' }}>
+          <button onClick={onClose} aria-label="Fechar" className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--color-surface)' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"/>
               <line x1="6" y1="6" x2="18" y2="18"/>
@@ -154,7 +154,7 @@ export default function FoodSearchModal({ mealType, date, onClose, onAdded }: Fo
           </button>
         </div>
 
-        <div className="p-4 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 60px)' }}>
+        <div className="p-4 overflow-y-auto" style={{ minHeight: '340px', maxHeight: 'calc(90vh - 60px)' }}>
           {!selectedFood ? (
             <>
               {/* Search input */}
