@@ -89,6 +89,41 @@ export async function saveGoals(data: SaveGoalsInput) {
   }
 }
 
+// ─── WhatsApp phone number ─────────────────────────────────────────────────
+
+export async function updatePhone(rawPhone: string): Promise<{ success?: boolean; phone?: string; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
+  if (!dbUser) return { error: 'Usuário não encontrado' }
+
+  // Normaliza: só dígitos, sem +, espaços ou traços (formato esperado pela Meta: 5511999999999)
+  const digits = rawPhone.replace(/\D/g, '')
+
+  if (digits.length < 12 || digits.length > 13) {
+    return { error: 'Número inválido. Use o formato com DDI + DDD, ex: 5511999999999.' }
+  }
+
+  // Garante unicidade — não permite dois usuários com o mesmo número
+  const existing = await prisma.user.findFirst({
+    where: { phone: digits, NOT: { id: dbUser.id } },
+  })
+  if (existing) {
+    return { error: 'Este número já está vinculado a outra conta.' }
+  }
+
+  try {
+    await prisma.user.update({ where: { id: dbUser.id }, data: { phone: digits } })
+    revalidatePath('/app/configuracoes')
+    return { success: true, phone: digits }
+  } catch (e) {
+    console.error(e)
+    return { error: 'Erro ao salvar número' }
+  }
+}
+
 // ─── Quick profile update (inline editing) ────────────────────────────────
 
 export interface UpdateProfileInput {
