@@ -4,7 +4,7 @@ import type { SmartWorkoutPlan, ExerciseAlternative } from '@/lib/workout-types'
 
 let _openai: OpenAI | undefined
 
-function getOpenAI(): OpenAI {
+export function getOpenAI(): OpenAI {
   if (!_openai) {
     _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   }

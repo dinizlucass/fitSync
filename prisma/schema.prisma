@@ -45,8 +45,22 @@ model User {
   mealLogs        MealLog[]
   weightLogs      WeightLog[]
   dietTemplate    DietTemplate?
+  chatMessages    ChatMessage[]
 
   @@map("users")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   // 'user' | 'assistant'
+  content   String
+  channel   String   @default("whatsapp") // 'whatsapp' | 'app'
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("chat_messages")
 }
 
 model Profile {

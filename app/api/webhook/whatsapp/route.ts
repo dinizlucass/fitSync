@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server'
 import crypto from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { sendWhatsAppMessage, downloadMetaMedia } from '@/lib/whatsapp'
-import { parseWorkoutMessage, parseMealMessage, analyzeFoodImage } from '@/lib/openai'
+import { analyzeFoodImage } from '@/lib/openai'
+import { runCoach } from '@/lib/coach/coach'
 
 /**
  * Verifica a assinatura HMAC-SHA256 do corpo bruto contra o header
@@ -73,125 +74,15 @@ export async function POST(request: NextRequest) {
 
     if (messageType === 'text') {
       const text = message.text.body as string
-      const lowerText = text.toLowerCase()
 
-      // Detect if it's a workout or meal message
-      const workoutKeywords = ['treino', 'supino', 'rosca', 'agachamento', 'leg', 'puxada', 'remada', 'desenvolvimento', 'kg', 'série', 'rep', 'exerc']
-      const mealKeywords = ['comi', 'almocei', 'jantei', 'café', 'lanche', 'refeição', 'gramas', 'arroz', 'frango', 'proteína', 'kcal', 'caloria']
-
-      const isWorkout = workoutKeywords.some(kw => lowerText.includes(kw))
-      const isMeal = mealKeywords.some(kw => lowerText.includes(kw))
-
-      if (isWorkout && !isMeal) {
-        try {
-          const parsed = await parseWorkoutMessage(text)
-
-          // Save workout session if user has a workout
-          const latestWorkout = await prisma.workout.findFirst({
-            where: { userId: user.id },
-            orderBy: { createdAt: 'desc' },
-          })
-
-          if (latestWorkout) {
-            const sessionSets = []
-            for (const ex of parsed.exercises) {
-              let exercise = await prisma.exercise.findFirst({ where: { name: { contains: ex.name, mode: 'insensitive' } } })
-              if (!exercise) {
-                exercise = await prisma.exercise.create({ data: { name: ex.name, muscleGroup: 'Outros' } })
-              }
-              for (let i = 0; i < ex.sets.length; i++) {
-                sessionSets.push({
-                  exerciseId: exercise.id,
-                  setNumber: i + 1,
-                  weightKg: ex.sets[i].weight,
-                  reps: ex.sets[i].reps,
-                  isPersonalRecord: false,
-                })
-              }
-            }
-
-            await prisma.workoutSession.create({
-              data: {
-                userId: user.id,
-                workoutId: latestWorkout.id,
-                sets: { create: sessionSets },
-              },
-            })
-          }
-
-          // Format reply
-          let reply = '✅ *Treino registrado!*\n\n'
-          for (const ex of parsed.exercises) {
-            reply += `💪 *${ex.name}*\n`
-            for (const set of ex.sets) {
-              reply += `  • ${set.weight ? `${set.weight}kg` : '—'} × ${set.reps ?? '—'} reps\n`
-            }
-            reply += '\n'
-          }
-          reply += 'Ótimo treino! 🔥'
-
-          await sendWhatsAppMessage(from, reply)
-        } catch {
-          await sendWhatsAppMessage(from, '❌ Não consegui interpretar seu treino. Tente ser mais específico, ex: "Supino 4x8 80kg"')
-        }
-      } else if (isMeal) {
-        try {
-          const parsed = await parseMealMessage(text)
-
-          // Create meal log
-          const today = new Date()
-          let mealLog = await prisma.mealLog.findFirst({
-            where: {
-              userId: user.id,
-              mealType: 'SNACK',
-              date: { gte: new Date(today.setHours(0, 0, 0, 0)) },
-            },
-          })
-
-          if (!mealLog) {
-            mealLog = await prisma.mealLog.create({
-              data: { userId: user.id, date: new Date(), mealType: 'SNACK' },
-            })
-          }
-
-          for (const item of parsed.items) {
-            let food = await prisma.food.findFirst({ where: { name: { contains: item.name, mode: 'insensitive' } } })
-            if (!food) {
-              food = await prisma.food.create({
-                data: {
-                  name: item.name,
-                  calories: item.calories,
-                  proteinG: item.proteinG,
-                  carbsG: item.carbsG,
-                  fatG: item.fatG,
-                  servingSize: item.quantityG,
-                },
-              })
-            }
-            await prisma.mealItem.create({
-              data: { mealLogId: mealLog.id, foodId: food.id, quantityG: item.quantityG },
-            })
-          }
-
-          const calorieGoal = user.profile?.calorieGoal ?? 2000
-          const reply = `🍽️ *Refeição registrada!*\n\n` +
-            `Calorias: *${Math.round(parsed.totalCalories)} kcal*\n` +
-            `🥩 Proteína: ${Math.round(parsed.totalProteinG)}g\n` +
-            `🍚 Carboidratos: ${Math.round(parsed.totalCarbsG)}g\n` +
-            `🫒 Gordura: ${Math.round(parsed.totalFatG)}g\n\n` +
-            `Meta diária: ${Math.round(calorieGoal)} kcal`
-
-          await sendWhatsAppMessage(from, reply)
-        } catch {
-          await sendWhatsAppMessage(from, '❌ Não consegui interpretar sua refeição. Tente descrever os alimentos e quantidades.')
-        }
-      } else {
-        await sendWhatsAppMessage(from,
-          '👋 Olá! Você pode me enviar:\n\n' +
-          '💪 *Treino*: "Supino 4x8 80kg, rosca 3x12 20kg"\n' +
-          '🍽️ *Refeição*: "Almocei arroz 150g, frango 200g"\n' +
-          '📸 *Foto* da sua refeição para análise automática'
-        )
+      // Coach conversacional (Sync): entende a intenção, lê dados reais via tools,
+      // age (registra/ajusta) e responde no estilo WhatsApp.
+      try {
+        const reply = await runCoach({ userId: user.id, message: text, channel: 'whatsapp' })
+        await sendWhatsAppMessage(from, reply)
+      } catch (e) {
+        console.error('Coach error:', e)
+        await sendWhatsAppMessage(from, 'Deu um probleminha aqui pra processar sua mensagem. Tenta de novo daqui a pouco? 🙏')
       }
     } else if (messageType === 'image') {
       // Handle food image

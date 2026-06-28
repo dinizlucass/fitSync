@@ -8,9 +8,9 @@ import {
   generateSmartDietPlan,
   refineMealVariant,
   refineExercise,
-  chatWithCoach,
   type ChatMessage,
 } from '@/lib/openai'
+import { runCoach } from '@/lib/coach/coach'
 import { WORKOUT_METHODS } from '@/lib/workout-methods'
 import type { SmartDietPlan, MealVariant } from '@/lib/diet-types'
 import type { SmartWorkoutPlan, ExerciseAlternative, VolumePreference } from '@/lib/workout-types'
@@ -281,47 +281,19 @@ export async function refineExerciseAction(params: {
 
 export async function sendChatMessage(params: {
   message: string
-  history: ChatMessage[]
+  // Mantido por compatibilidade com o chat do app; o histórico real vem da
+  // memória persistida do coach (tabela chat_messages).
+  history?: ChatMessage[]
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
 
-  const dbUser = await prisma.user.findUnique({
-    where: { supabaseId: user.id },
-    include: { profile: true },
-  })
+  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
   if (!dbUser) return { error: 'Usuário não encontrado' }
 
-  const profile = dbUser.profile
-  const goalLabels: Record<string, string> = {
-    GAIN_MUSCLE: 'Ganho de massa muscular',
-    LOSE_FAT: 'Perda de gordura',
-    RECOMPOSITION: 'Recomposição corporal',
-    MAINTAIN: 'Manutenção',
-  }
-  const levelLabels: Record<string, string> = {
-    SEDENTARY: 'Sedentário',
-    LIGHT: 'Iniciante',
-    MODERATE: 'Intermediário',
-    ACTIVE: 'Ativo',
-    VERY_ACTIVE: 'Avançado',
-  }
-
   try {
-    const reply = await chatWithCoach({
-      message: params.message,
-      history: params.history,
-      userContext: {
-        goal: goalLabels[profile?.goalType ?? 'MAINTAIN'] ?? 'Manutenção',
-        level: levelLabels[profile?.activityLevel ?? 'MODERATE'] ?? 'Intermediário',
-        weight: profile?.weightKg ?? undefined,
-        height: profile?.heightCm ?? undefined,
-        calorieGoal: profile?.calorieGoal ?? undefined,
-        proteinGoal: profile?.proteinGoalG ?? undefined,
-      },
-    })
-
+    const reply = await runCoach({ userId: dbUser.id, message: params.message, channel: 'app' })
     return { success: true, reply }
   } catch (e) {
     console.error(e)
