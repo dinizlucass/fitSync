@@ -1,9 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
-import { format, startOfDay, endOfDay } from 'date-fns'
+import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import Link from 'next/link'
+import { dayRange } from '@/lib/coach/shared'
 
 export default async function HojePage() {
   const supabase = await createClient()
@@ -11,9 +12,12 @@ export default async function HojePage() {
 
   if (!user) redirect('/login')
 
-  const today = new Date()
-  const todayStart = startOfDay(today)
-  const todayEnd = endOfDay(today)
+  const now = new Date()
+  // "Hoje" no fuso do usuário (America/Sao_Paulo) — evita o dia "virar" à meia-noite UTC
+  const { start: todayStart, end: todayEnd } = dayRange()
+  const spHour = Number(
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }).format(now)
+  ) % 24
 
   // Fetch user from DB
   const dbUser = await prisma.user.findUnique({
@@ -86,7 +90,7 @@ export default async function HojePage() {
   }).catch(() => null)
 
   // Fetch weight 7 days ago for comparison
-  const sevenDaysAgo = new Date(today)
+  const sevenDaysAgo = new Date(now)
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
   const oldWeight = await prisma.weightLog.findFirst({
     where: { userId: dbUser.id, date: { lte: sevenDaysAgo } },
@@ -124,7 +128,7 @@ export default async function HojePage() {
   // Days since last session for suggested workout
   function daysSince(date: Date | undefined): string {
     if (!date) return 'Nunca realizado'
-    const diff = Math.floor((today.getTime() - date.getTime()) / 86400000)
+    const diff = Math.floor((now.getTime() - date.getTime()) / 86400000)
     if (diff === 0) return 'Hoje'
     if (diff === 1) return 'Ontem'
     return `${diff} dias atrás`
@@ -140,13 +144,14 @@ export default async function HojePage() {
   const ringOffset = ringCircumference - (caloriePercent / 100) * ringCircumference
 
   const greeting = () => {
-    const h = today.getHours()
-    if (h < 12) return 'Bom dia'
-    if (h < 18) return 'Boa tarde'
+    if (spHour < 12) return 'Bom dia'
+    if (spHour < 18) return 'Boa tarde'
     return 'Boa noite'
   }
 
-  const formattedDate = format(today, "EEEE, d 'de' MMMM", { locale: ptBR })
+  const formattedDate = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', weekday: 'long', day: 'numeric', month: 'long',
+  }).format(now)
   const formattedDateCap = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1)
 
   return (

@@ -84,7 +84,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--color-surface)' }}>
+    <div className="flex h-[100dvh] overflow-hidden" style={{ backgroundColor: 'var(--color-surface)' }}>
       {/* Sidebar (desktop) */}
       <aside className="hidden md:flex flex-col w-56 border-r flex-shrink-0" style={{ backgroundColor: 'var(--color-background)', borderColor: 'var(--color-border)' }}>
         {/* Logo */}
@@ -145,13 +145,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
+        <div className="flex-1 overflow-y-auto pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
           {children}
         </div>
       </main>
 
       {/* Bottom nav (mobile) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t z-50 flex items-center" style={{ backgroundColor: 'var(--color-background)', borderColor: 'var(--color-border)' }}>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 border-t z-50 flex items-center pb-[env(safe-area-inset-bottom)]" style={{ backgroundColor: 'var(--color-background)', borderColor: 'var(--color-border)' }}>
         {navItems.map((item) => {
           const isActive = pathname === item.href || (item.href !== '/app/hoje' && pathname.startsWith(item.href))
           return (

@@ -32,6 +32,7 @@ export default function TreinoPage() {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   async function loadWorkouts() {
     setLoading(true)
@@ -60,8 +61,13 @@ export default function TreinoPage() {
 
   async function handleDelete(workoutId: string) {
     setDeleting(true)
-    await deleteWorkout(workoutId)
+    setDeleteError(null)
+    const res = await deleteWorkout(workoutId)
     setDeleting(false)
+    if (res?.error) {
+      setDeleteError(res.error)
+      return
+    }
     setConfirmDelete(null)
     setOpenMenu(null)
     loadWorkouts()
@@ -164,7 +170,7 @@ export default function TreinoPage() {
                           <span>✏️</span> Editar
                         </Link>
                         <button
-                          onClick={() => setConfirmDelete(workout.id)}
+                          onClick={() => { setConfirmDelete(workout.id); setDeleteError(null) }}
                           className="flex items-center gap-2 px-4 py-2.5 text-sm w-full text-left transition-colors hover:bg-red-50 dark:hover:bg-red-900/20"
                           style={{ color: 'var(--color-alert)' }}
                         >
@@ -179,9 +185,12 @@ export default function TreinoPage() {
                 {isConfirming ? (
                   <div className="mb-3 p-3 rounded-lg border" style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-alert)' }}>
                     <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-alert)' }}>Tem certeza? Essa ação não pode ser desfeita.</p>
+                    {deleteError && (
+                      <p className="text-xs mb-2" style={{ color: 'var(--color-alert)' }}>{deleteError}</p>
+                    )}
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setConfirmDelete(null)}
+                        onClick={() => { setConfirmDelete(null); setDeleteError(null) }}
                         className="flex-1 text-xs py-1.5 rounded-lg border"
                         style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)', backgroundColor: 'transparent' }}
                       >

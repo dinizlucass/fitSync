@@ -249,9 +249,15 @@ export async function deleteWorkout(workoutId: string) {
     const workout = await prisma.workout.findFirst({ where: { id: workoutId, userId: dbUser.id } })
     if (!workout) return { error: 'Treino não encontrado' }
 
-    await prisma.workout.delete({ where: { id: workoutId } })
+    // WorkoutSession não tem cascade no schema — apaga as sessões (SessionSet cascateia)
+    // antes de remover o treino, senão a FK bloqueia o delete de treinos já realizados.
+    await prisma.$transaction([
+      prisma.workoutSession.deleteMany({ where: { workoutId } }),
+      prisma.workout.delete({ where: { id: workoutId } }),
+    ])
 
     revalidatePath('/app/treino')
+    revalidatePath('/app/hoje')
     return { success: true }
   } catch (e) {
     console.error(e)
