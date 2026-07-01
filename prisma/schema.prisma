@@ -28,6 +28,7 @@ enum MealType {
   SNACK
   PRE_WORKOUT
   POST_WORKOUT
+  CEIA
 }
 
 model User {

@@ -9,13 +9,15 @@ import { parseMealMessage } from '@/lib/openai'
 import { buildUserContext } from '@/lib/coach/context'
 import { dayRange, scaleMacros, round } from '@/lib/coach/shared'
 
-type MealTypeEnum = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK' | 'PRE_WORKOUT' | 'POST_WORKOUT'
+type MealTypeEnum = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK' | 'PRE_WORKOUT' | 'POST_WORKOUT' | 'CEIA'
 
 function mealNameToType(name: string): MealTypeEnum {
   const l = (name ?? '').toLowerCase()
   if (l.includes('café') || l.includes('cafe') || (l.includes('manhã') && !l.includes('lanche'))) return 'BREAKFAST'
   if (l.includes('almoç') || l.includes('almoc')) return 'LUNCH'
   if (l.includes('jantar') || l.includes('janta')) return 'DINNER'
+  // "ceia" antes de pós-treino: é a refeição da noite, não lanche/café da tarde
+  if (l.includes('ceia')) return 'CEIA'
   if (l.includes('pré-treino') || l.includes('pre-treino') || l.includes('pré treino') || l.includes('pre treino')) return 'PRE_WORKOUT'
   if (l.includes('pós-treino') || l.includes('pos-treino') || l.includes('pós treino') || l.includes('pos treino')) return 'POST_WORKOUT'
   return 'SNACK'

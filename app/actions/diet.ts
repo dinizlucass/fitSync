@@ -39,11 +39,12 @@ function parseQuantityG(quantityStr: string, calories: number): number {
   return Math.round(calories / 1.5) || 100
 }
 
-function mealNameToType(name: string): 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK' | 'PRE_WORKOUT' | 'POST_WORKOUT' {
+function mealNameToType(name: string): 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK' | 'PRE_WORKOUT' | 'POST_WORKOUT' | 'CEIA' {
   const l = name.toLowerCase()
   if (l.includes('café') || l.includes('cafe') || (l.includes('manhã') && !l.includes('lanche'))) return 'BREAKFAST'
   if (l.includes('almoço') || l.includes('almoco')) return 'LUNCH'
   if (l.includes('jantar')) return 'DINNER'
+  if (l.includes('ceia')) return 'CEIA'
   if (l.includes('pré-treino') || l.includes('pre-treino') || l.includes('pré treino') || l.includes('pre treino')) return 'PRE_WORKOUT'
   if (l.includes('pós-treino') || l.includes('pos-treino') || l.includes('pós treino') || l.includes('pos treino')) return 'POST_WORKOUT'
   return 'SNACK'

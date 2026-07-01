@@ -48,6 +48,7 @@ const MEALTYPE_PT: Record<string, string> = {
   SNACK: 'Lanche',
   PRE_WORKOUT: 'Pré-treino',
   POST_WORKOUT: 'Pós-treino',
+  CEIA: 'Ceia',
 }
 
 export async function buildUserContext(userId: string): Promise<UserContext> {

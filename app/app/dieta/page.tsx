@@ -74,6 +74,16 @@ const MEAL_TYPES = [
       </svg>
     ),
   },
+  {
+    key: 'CEIA',
+    label: 'Ceia',
+    time: '22:00',
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>
+      </svg>
+    ),
+  },
 ] as const
 
 // ─── Types ─────────────────────────────────────────────────────────────────
