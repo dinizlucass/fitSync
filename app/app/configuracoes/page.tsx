@@ -73,6 +73,19 @@ export default async function ConfiguracoesPage() {
             <polyline points="9 18 15 12 9 6"/>
           </svg>
         </Link>
+        <Link href="/app/assinatura" className="flex items-center justify-between p-4 border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-900" style={{ borderColor: 'var(--color-border)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--color-primary-light)' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2">
+                <rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+              </svg>
+            </div>
+            <span className="text-sm">Assinatura</span>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--color-text-muted)' }}>
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </Link>
         <WhatsAppConnect initialPhone={dbUser.phone} />
       </div>
     </div>

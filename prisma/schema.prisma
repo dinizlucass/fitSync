@@ -47,8 +47,31 @@ model User {
   weightLogs      WeightLog[]
   dietTemplate    DietTemplate?
   chatMessages    ChatMessage[]
+  subscription    Subscription?
 
   @@map("users")
+}
+
+model Subscription {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                String                          // 'monthly' | 'annual'
+  status              String    @default("PENDING")   // PENDING | TRIALING | ACTIVE | PAST_DUE | CANCELED | EXPIRED
+  billingType         String    @default("UNDEFINED")
+  value               Float
+  cycle               String                          // MONTHLY | YEARLY
+  cpfCnpj             String?
+  asaasCustomerId     String?
+  asaasSubscriptionId String?   @unique
+  checkoutUrl         String?
+  currentDueDate      DateTime?
+  trialEndsAt         DateTime?
+  lastEvent           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@map("subscriptions")
 }
 
 model ChatMessage {
