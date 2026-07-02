@@ -11,6 +11,8 @@ export default async function AdminPage() {
   if (!isAdminEmail(user.email)) redirect('/app/hoje')
 
   const [stats, users] = await Promise.all([getAdminStats(), listUsers()])
+  const loadError =
+    ('error' in stats ? stats.error : null) ?? ('error' in users ? users.error : null)
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
@@ -18,6 +20,11 @@ export default async function AdminPage() {
       <p className="text-sm mb-6" style={{ color: 'var(--color-text-muted)' }}>
         Gestão de usuários e assinaturas · logado como {user.email}
       </p>
+      {loadError && (
+        <div className="rounded-xl border p-4 mb-4 text-sm" style={{ borderColor: 'var(--color-alert, #E24B4A)', color: 'var(--color-alert, #E24B4A)' }}>
+          {loadError}
+        </div>
+      )}
       <AdminClient
         initialStats={'error' in stats ? null : stats}
         initialUsers={'error' in users ? [] : users}

@@ -32,28 +32,33 @@ export interface AdminStats {
 export async function getAdminStats(): Promise<AdminStats | { error: string }> {
   if (!(await requireAdmin())) return { error: 'Acesso negado' }
 
-  const { start, end } = dayRange()
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400_000)
+  try {
+    const { start, end } = dayRange()
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400_000)
 
-  const [
-    totalUsers, newUsers7d, phoneLinked,
-    subsTrialing, subsActive, subsPastDue,
-    mealsToday, coachMsgsToday,
-  ] = await Promise.all([
-    prisma.user.count(),
-    prisma.user.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
-    prisma.user.count({ where: { phone: { not: null } } }),
-    prisma.subscription.count({ where: { status: 'TRIALING' } }).catch(() => 0),
-    prisma.subscription.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
-    prisma.subscription.count({ where: { status: 'PAST_DUE' } }).catch(() => 0),
-    prisma.mealLog.count({ where: { date: { gte: start, lte: end } } }),
-    prisma.chatMessage.count({ where: { role: 'user', createdAt: { gte: start, lte: end } } }).catch(() => 0),
-  ])
+    const [
+      totalUsers, newUsers7d, phoneLinked,
+      subsTrialing, subsActive, subsPastDue,
+      mealsToday, coachMsgsToday,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+      prisma.user.count({ where: { phone: { not: null } } }),
+      prisma.subscription.count({ where: { status: 'TRIALING' } }).catch(() => 0),
+      prisma.subscription.count({ where: { status: 'ACTIVE' } }).catch(() => 0),
+      prisma.subscription.count({ where: { status: 'PAST_DUE' } }).catch(() => 0),
+      prisma.mealLog.count({ where: { date: { gte: start, lte: end } } }),
+      prisma.chatMessage.count({ where: { role: 'user', createdAt: { gte: start, lte: end } } }).catch(() => 0),
+    ])
 
-  return {
-    totalUsers, newUsers7d, phoneLinked,
-    subsTrialing, subsActive, subsPastDue,
-    mealsToday, coachMsgsToday,
+    return {
+      totalUsers, newUsers7d, phoneLinked,
+      subsTrialing, subsActive, subsPastDue,
+      mealsToday, coachMsgsToday,
+    }
+  } catch (e) {
+    reportError('admin:getAdminStats', e)
+    return { error: 'Erro ao carregar métricas. Verifique se as migrações SQL foram aplicadas.' }
   }
 }
 
@@ -72,31 +77,36 @@ export interface AdminUserRow {
 export async function listUsers(search?: string): Promise<AdminUserRow[] | { error: string }> {
   if (!(await requireAdmin())) return { error: 'Acesso negado' }
 
-  const q = search?.trim()
-  const users = await prisma.user.findMany({
-    where: q
-      ? {
-          OR: [
-            { email: { contains: q, mode: 'insensitive' } },
-            { name: { contains: q, mode: 'insensitive' } },
-            { phone: { contains: q.replace(/\D/g, '') || q } },
-          ],
-        }
-      : undefined,
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-    include: { subscription: true },
-  })
+  try {
+    const q = search?.trim()
+    const users = await prisma.user.findMany({
+      where: q
+        ? {
+            OR: [
+              { email: { contains: q, mode: 'insensitive' } },
+              { name: { contains: q, mode: 'insensitive' } },
+              { phone: { contains: q.replace(/\D/g, '') || q } },
+            ],
+          }
+        : undefined,
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: { subscription: true },
+    })
 
-  return users.map(u => ({
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    phone: u.phone,
-    createdAt: u.createdAt.toISOString(),
-    subStatus: u.subscription?.status ?? null,
-    subPlan: u.subscription?.plan ?? null,
-  }))
+    return users.map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      phone: u.phone,
+      createdAt: u.createdAt.toISOString(),
+      subStatus: u.subscription?.status ?? null,
+      subPlan: u.subscription?.plan ?? null,
+    }))
+  } catch (e) {
+    reportError('admin:listUsers', e)
+    return { error: 'Erro ao carregar usuários. Verifique se as migrações SQL foram aplicadas.' }
+  }
 }
 
 // ─── Premium manual (cortesia / revogar) ───────────────────────────────
