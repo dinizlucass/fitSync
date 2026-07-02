@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import Link from 'next/link'
 import { dayRange } from '@/lib/coach/shared'
+import { sendWelcomeEmail } from '@/lib/email'
 
 export default async function HojePage() {
   const supabase = await createClient()
@@ -35,6 +36,8 @@ export default async function HojePage() {
           name: user.user_metadata?.name ?? null,
         },
       })
+      // Boas-vindas no 1º acesso (fire-and-forget; no-op sem RESEND_API_KEY)
+      if (user.email) void sendWelcomeEmail(user.email, user.user_metadata?.name)
     } catch {}
     redirect('/app/configuracoes/metas')
   }

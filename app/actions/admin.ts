@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache'
 import { isAdminEmail } from '@/lib/admin'
 import { dayRange } from '@/lib/coach/shared'
 import { reportError } from '@/lib/monitoring'
+import { sendAccountCreatedEmail } from '@/lib/email'
 
 /** Garante que quem chama é admin. Retorna null se não for. */
 async function requireAdmin(): Promise<{ email: string } | null> {
@@ -190,6 +191,21 @@ export async function adminCreateUser(params: {
     await prisma.user.create({
       data: { supabaseId: data.user.id, email, name: params.name ?? null },
     })
+
+    // Convite por e-mail com link seguro de definição de senha (melhor que
+    // compartilhar a senha em texto). No-op se RESEND_API_KEY não estiver setada.
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://fit-sync-eight-zeta.vercel.app'
+      const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email,
+        options: { redirectTo: `${appUrl}/redefinir-senha` },
+      })
+      const actionLink = linkData?.properties?.action_link
+      if (actionLink) void sendAccountCreatedEmail(email, actionLink, params.name)
+    } catch (e) {
+      reportError('admin:inviteEmail', e, { email })
+    }
 
     revalidatePath('/app/admin')
     return { success: true }

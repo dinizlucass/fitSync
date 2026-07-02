@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-type Tab = 'login' | 'signup'
+type Tab = 'login' | 'signup' | 'forgot'
 
 function traduzirErroAuth(msg: string): string {
   const m = msg.toLowerCase()
@@ -36,6 +36,19 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
     setMessage(null)
+
+    if (tab === 'forgot') {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/redefinir-senha`,
+      })
+      if (error) {
+        setError(traduzirErroAuth(error.message))
+      } else {
+        setMessage('Enviamos um link de redefinição para o seu e-mail. Confira a caixa de entrada (e o spam).')
+      }
+      setLoading(false)
+      return
+    }
 
     if (tab === 'login') {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -88,7 +101,7 @@ export default function LoginPage() {
             <span style={{ color: 'var(--color-primary)' }}>Sync</span>
           </span>
           <p className="text-sm mt-2" style={{ color: 'var(--color-text-muted)' }}>
-            {tab === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta grátis'}
+            {tab === 'login' ? 'Bem-vindo de volta' : tab === 'signup' ? 'Crie sua conta grátis' : 'Recupere seu acesso'}
           </p>
         </div>
 
@@ -112,6 +125,7 @@ export default function LoginPage() {
           </div>
 
           {/* Google button */}
+          {tab !== 'forgot' && (
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
@@ -126,12 +140,21 @@ export default function LoginPage() {
             </svg>
             Entrar com Google
           </button>
+          )}
 
+          {tab !== 'forgot' && (
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 h-px" style={{ backgroundColor: 'var(--color-border)' }}></div>
             <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>ou</span>
             <div className="flex-1 h-px" style={{ backgroundColor: 'var(--color-border)' }}></div>
           </div>
+          )}
+
+          {tab === 'forgot' && (
+            <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
+              Informe o e-mail da sua conta e enviaremos um link para você criar uma nova senha.
+            </p>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {tab === 'signup' && (
@@ -165,6 +188,7 @@ export default function LoginPage() {
                 style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)' }}
               />
             </div>
+            {tab !== 'forgot' && (
             <div>
               <label className="block text-xs font-medium mb-1.5">Senha</label>
               <input
@@ -177,7 +201,18 @@ export default function LoginPage() {
                 className="w-full text-sm px-3 py-2.5 rounded-lg border outline-none focus:ring-2 transition-all"
                 style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)' }}
               />
+              {tab === 'login' && (
+                <button
+                  type="button"
+                  onClick={() => { setTab('forgot'); setError(null); setMessage(null) }}
+                  className="text-xs mt-1.5"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  Esqueci minha senha
+                </button>
+              )}
             </div>
+            )}
 
             {error && (
               <p className="text-xs p-3 rounded-lg" style={{ backgroundColor: '#fef2f2', color: 'var(--color-alert)' }}>
@@ -196,8 +231,19 @@ export default function LoginPage() {
               className="w-full text-sm py-2.5 px-4 rounded-lg text-white font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ backgroundColor: 'var(--color-primary)' }}
             >
-              {loading ? 'Aguarde...' : tab === 'login' ? 'Entrar' : 'Criar conta'}
+              {loading ? 'Aguarde...' : tab === 'login' ? 'Entrar' : tab === 'signup' ? 'Criar conta' : 'Enviar link de redefinição'}
             </button>
+
+            {tab === 'forgot' && (
+              <button
+                type="button"
+                onClick={() => { setTab('login'); setError(null); setMessage(null) }}
+                className="w-full text-xs"
+                style={{ color: 'var(--color-text-muted)' }}
+              >
+                ← Voltar ao login
+              </button>
+            )}
           </form>
         </div>
 

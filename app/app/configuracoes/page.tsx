@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import ProfileGoalsEditor from '@/components/profile/ProfileGoalsEditor'
 import WhatsAppConnect from '@/components/profile/WhatsAppConnect'
+import ChangePassword from '@/components/profile/ChangePassword'
 import { isAdminEmail } from '@/lib/admin'
 
 export default async function ConfiguracoesPage() {
@@ -88,6 +89,7 @@ export default async function ConfiguracoesPage() {
           </svg>
         </Link>
         <WhatsAppConnect initialPhone={dbUser.phone} />
+        <ChangePassword />
         {isAdminEmail(user.email) && (
           <Link href="/app/admin" className="flex items-center justify-between p-4 border-t transition-colors hover:bg-gray-50 dark:hover:bg-gray-900" style={{ borderColor: 'var(--color-border)' }}>
             <div className="flex items-center gap-3">

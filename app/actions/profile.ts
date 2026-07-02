@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { calculateTDEE, calculateMacros } from '@/lib/calculations'
 import { revalidatePath } from 'next/cache'
+import { sendWelcomeEmail } from '@/lib/email'
 
 type GoalType = 'GAIN_MUSCLE' | 'LOSE_FAT' | 'RECOMPOSITION' | 'MAINTAIN'
 type ActivityLevel = 'SEDENTARY' | 'LIGHT' | 'MODERATE' | 'ACTIVE' | 'VERY_ACTIVE'
@@ -32,6 +33,8 @@ export async function saveGoals(data: SaveGoalsInput) {
         name: user.user_metadata?.name ?? null,
       },
     })
+    // Boas-vindas no 1º acesso (fire-and-forget; no-op sem RESEND_API_KEY)
+    if (user.email) void sendWelcomeEmail(user.email, user.user_metadata?.name)
   }
 
   // Calculate age
