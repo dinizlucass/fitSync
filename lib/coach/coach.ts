@@ -11,6 +11,8 @@ import { prisma } from '@/lib/prisma'
 import { COACH_SYSTEM_PROMPT } from '@/lib/coach/prompt'
 import { buildUserContext, formatUserContext } from '@/lib/coach/context'
 import { TOOL_DEFINITIONS, executeTool } from '@/lib/coach/tools'
+import { checkCoachRateLimit } from '@/lib/coach/rate-limit'
+import { reportError } from '@/lib/monitoring'
 
 const COACH_MODEL = 'gpt-4.1-mini'
 const MAX_TOOL_ROUNDS = 3
@@ -23,6 +25,13 @@ export interface RunCoachParams {
 }
 
 export async function runCoach({ userId, message, channel = 'whatsapp' }: RunCoachParams): Promise<string> {
+  // 0. Rate limit — protege o custo de OpenAI. Mensagem bloqueada não chama a
+  // LLM e não entra na memória.
+  const limit = await checkCoachRateLimit(userId)
+  if (!limit.allowed) {
+    return limit.message ?? 'Limite de mensagens atingido. Tenta de novo mais tarde.'
+  }
+
   // 1. Contexto (briefing do estado de hoje) + memória recente.
   // A memória é best-effort: se a tabela chat_messages ainda não existe
   // (migração não rodada), o coach segue funcionando, só sem histórico.
@@ -109,7 +118,7 @@ export async function runCoach({ userId, message, channel = 'whatsapp' }: RunCoa
       ],
     })
   } catch (e) {
-    console.error('Falha ao salvar memória do coach:', e)
+    reportError('coach:memoria', e, { userId, channel })
   }
 
   return finalText

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { saoPauloDateStr } from '@/lib/coach/shared'
+import { reportError } from '@/lib/monitoring'
 import { getPlan, DEFAULT_BILLING_TYPE, ACTIVE_STATUSES } from '@/lib/asaas/config'
 import {
   createAsaasCustomer,
@@ -145,7 +146,7 @@ export async function startSubscription(params: {
     revalidatePath('/app/assinatura')
     return { checkoutUrl }
   } catch (e) {
-    console.error('startSubscription:', e)
+    reportError('asaas:startSubscription', e, { userId: dbUser.id, plan: plan.id })
     return { error: e instanceof Error ? e.message : 'Erro ao iniciar assinatura' }
   }
 }
@@ -210,7 +211,7 @@ export async function cancelMySubscription(): Promise<{ success?: boolean; error
     revalidatePath('/app/assinatura')
     return { success: true }
   } catch (e) {
-    console.error('cancelMySubscription:', e)
+    reportError('asaas:cancelSubscription', e, { userId: dbUser!.id })
     return { error: e instanceof Error ? e.message : 'Erro ao cancelar' }
   }
 }

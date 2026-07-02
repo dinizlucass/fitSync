@@ -5,6 +5,8 @@ import { sendWhatsAppMessage, downloadMetaMedia } from '@/lib/whatsapp'
 import { analyzeFoodImage } from '@/lib/openai'
 import { runCoach } from '@/lib/coach/coach'
 import { dayRange } from '@/lib/coach/shared'
+import { checkCoachRateLimit } from '@/lib/coach/rate-limit'
+import { reportError } from '@/lib/monitoring'
 
 /**
  * Verifica a assinatura HMAC-SHA256 do corpo bruto contra o header
@@ -82,10 +84,17 @@ export async function POST(request: NextRequest) {
         const reply = await runCoach({ userId: user.id, message: text, channel: 'whatsapp' })
         await sendWhatsAppMessage(from, reply)
       } catch (e) {
-        console.error('Coach error:', e)
+        reportError('whatsapp:coach', e, { userId: user.id })
         await sendWhatsAppMessage(from, 'Deu um probleminha aqui pra processar sua mensagem. Tenta de novo daqui a pouco? 🙏')
       }
     } else if (messageType === 'image') {
+      // Rate limit também vale pra fotos (análise de imagem é a chamada mais cara)
+      const limit = await checkCoachRateLimit(user.id)
+      if (!limit.allowed) {
+        await sendWhatsAppMessage(from, limit.message ?? 'Limite de mensagens atingido por hoje.')
+        return Response.json({ status: 'rate_limited' })
+      }
+
       // Handle food image
       try {
         const mediaId = message.image.id as string
@@ -141,14 +150,23 @@ export async function POST(request: NextRequest) {
         reply += `P: ${Math.round(parsed.totalProteinG)}g · C: ${Math.round(parsed.totalCarbsG)}g · G: ${Math.round(parsed.totalFatG)}g`
 
         await sendWhatsAppMessage(from, reply)
-      } catch {
+
+        // Registra o turno na memória do coach (continuidade + contagem do rate limit)
+        await prisma.chatMessage.createMany({
+          data: [
+            { userId: user.id, role: 'user', content: '[Foto de refeição enviada]', channel: 'whatsapp' },
+            { userId: user.id, role: 'assistant', content: reply, channel: 'whatsapp' },
+          ],
+        }).catch(() => {})
+      } catch (e) {
+        reportError('whatsapp:imagem', e, { userId: user.id })
         await sendWhatsAppMessage(from, '❌ Não consegui analisar a imagem. Tente enviar uma foto mais clara.')
       }
     }
 
     return Response.json({ status: 'ok' })
   } catch (e) {
-    console.error('WhatsApp webhook error:', e)
+    reportError('whatsapp:webhook', e)
     return Response.json({ status: 'error' }, { status: 500 })
   }
 }

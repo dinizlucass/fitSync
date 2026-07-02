@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { reportError } from '@/lib/monitoring'
 
 /**
  * Webhook do Asaas para eventos de cobrança.
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (e) {
-    console.error('Asaas webhook update error:', e)
+    reportError('asaas:webhook', e, { event, subscription: payment.subscription })
     return Response.json({ status: 'error' }, { status: 500 })
   }
 
