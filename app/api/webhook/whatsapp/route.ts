@@ -62,6 +62,43 @@ export async function POST(request: NextRequest) {
     const from = message.from as string
     const messageType = message.type as string
 
+    // ── Vinculação de número por código (Configurações → WhatsApp) ─────────
+    // Roda ANTES do lookup por telefone: o remetente ainda não está vinculado.
+    // O número gravado é o `from` real informado pela Meta — prova de posse.
+    if (messageType === 'text') {
+      const codeMatch = (message.text?.body as string | undefined)?.match(/^\s*FIT[-\s]?(\d{6})\s*$/i)
+      if (codeMatch) {
+        const code = `FIT-${codeMatch[1]}`
+        const owner = await prisma.user.findFirst({
+          where: { phoneVerifyCode: code, phoneVerifyExpiresAt: { gte: new Date() } },
+        }).catch(() => null)
+
+        if (owner) {
+          // Remove o número de qualquer outra conta (posse comprovada pelo envio)
+          await prisma.user.updateMany({
+            where: { phone: from, NOT: { id: owner.id } },
+            data: { phone: null },
+          })
+          await prisma.user.update({
+            where: { id: owner.id },
+            data: { phone: from, phoneVerifyCode: null, phoneVerifyExpiresAt: null },
+          })
+          const firstName = owner.name?.split(' ')[0]
+          await sendWhatsAppMessage(from,
+            `✅ Número vinculado com sucesso${firstName ? `, ${firstName}` : ''}!\n\n` +
+            'Agora é só me mandar seus treinos e refeições por aqui. Exemplos:\n' +
+            '💪 "Supino 4x8 80kg"\n🍽️ "Almocei arroz, feijão e 200g de frango"\n📸 ou uma foto da refeição'
+          )
+          return Response.json({ status: 'phone_linked' })
+        }
+
+        await sendWhatsAppMessage(from,
+          '❌ Código inválido ou expirado. Gere um novo no app em *Configurações → WhatsApp* e envie de novo.'
+        )
+        return Response.json({ status: 'invalid_code' })
+      }
+    }
+
     // Find user by phone
     const user = await prisma.user.findFirst({
       where: { phone: from },
@@ -70,7 +107,11 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       await sendWhatsAppMessage(from,
-        '👋 Olá! Para usar o FitSync pelo WhatsApp, cadastre seu número no app em *Configurações → WhatsApp*.\n\nAcesse: https://fit-sync-eight-zeta.vercel.app'
+        '👋 Olá! Para usar o FitSync pelo WhatsApp:\n\n' +
+        '1. Acesse https://fit-sync-eight-zeta.vercel.app\n' +
+        '2. Vá em *Configurações → WhatsApp → Conectar*\n' +
+        '3. Envie aqui o código que aparecer (ex: FIT-123456)\n\n' +
+        'Pronto! Seu número fica vinculado à sua conta.'
       )
       return Response.json({ status: 'user_not_found' })
     }

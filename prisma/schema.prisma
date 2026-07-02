@@ -32,13 +32,15 @@ enum MealType {
 }
 
 model User {
-  id         String   @id @default(cuid())
-  supabaseId String   @unique
-  email      String   @unique
-  name       String?
-  phone      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                   String    @id @default(cuid())
+  supabaseId           String    @unique
+  email                String    @unique
+  name                 String?
+  phone                String?
+  phoneVerifyCode      String?   @unique // código FIT-XXXXXX aguardando envio pelo WhatsApp
+  phoneVerifyExpiresAt DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   profile         Profile?
   workouts        Workout[]

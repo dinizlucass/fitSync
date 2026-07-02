@@ -89,9 +89,19 @@ export async function saveGoals(data: SaveGoalsInput) {
   }
 }
 
-// ─── WhatsApp phone number ─────────────────────────────────────────────────
+// ─── WhatsApp — vinculação por código ──────────────────────────────────────
+// Fluxo seguro: o app gera um código e o USUÁRIO envia pelo WhatsApp para o
+// bot. O webhook vincula o número REAL informado pela Meta (from) ao dono do
+// código — impossível cadastrar número de terceiros ou errar digitação.
 
-export async function updatePhone(rawPhone: string): Promise<{ success?: boolean; phone?: string; error?: string }> {
+const PHONE_VERIFY_TTL_MIN = 15
+
+export async function startPhoneVerification(): Promise<{
+  code?: string
+  botNumber?: string
+  expiresInMin?: number
+  error?: string
+}> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
@@ -99,28 +109,55 @@ export async function updatePhone(rawPhone: string): Promise<{ success?: boolean
   const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
   if (!dbUser) return { error: 'Usuário não encontrado' }
 
-  // Normaliza: só dígitos, sem +, espaços ou traços (formato esperado pela Meta: 5511999999999)
-  const digits = rawPhone.replace(/\D/g, '')
-
-  if (digits.length < 12 || digits.length > 13) {
-    return { error: 'Número inválido. Use o formato com DDI + DDD, ex: 5511999999999.' }
-  }
-
-  // Garante unicidade — não permite dois usuários com o mesmo número
-  const existing = await prisma.user.findFirst({
-    where: { phone: digits, NOT: { id: dbUser.id } },
-  })
-  if (existing) {
-    return { error: 'Este número já está vinculado a outra conta.' }
-  }
+  const { randomInt } = await import('crypto')
+  const code = `FIT-${randomInt(100000, 1000000)}`
+  const expiresAt = new Date(Date.now() + PHONE_VERIFY_TTL_MIN * 60_000)
 
   try {
-    await prisma.user.update({ where: { id: dbUser.id }, data: { phone: digits } })
-    revalidatePath('/app/configuracoes')
-    return { success: true, phone: digits }
+    await prisma.user.update({
+      where: { id: dbUser.id },
+      data: { phoneVerifyCode: code, phoneVerifyExpiresAt: expiresAt },
+    })
+    return {
+      code,
+      botNumber: process.env.NEXT_PUBLIC_WHATSAPP_BOT_NUMBER ?? undefined,
+      expiresInMin: PHONE_VERIFY_TTL_MIN,
+    }
   } catch (e) {
-    console.error(e)
-    return { error: 'Erro ao salvar número' }
+    console.error('startPhoneVerification:', e)
+    return { error: 'Erro ao gerar código. Tente novamente.' }
+  }
+}
+
+/** Consulta se o número já foi vinculado (para o botão "Já enviei"). */
+export async function getLinkedPhone(): Promise<{ phone: string | null }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { phone: null }
+
+  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } }).catch(() => null)
+  if (dbUser?.phone) revalidatePath('/app/configuracoes')
+  return { phone: dbUser?.phone ?? null }
+}
+
+export async function unlinkPhone(): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
+  if (!dbUser) return { error: 'Usuário não encontrado' }
+
+  try {
+    await prisma.user.update({
+      where: { id: dbUser.id },
+      data: { phone: null, phoneVerifyCode: null, phoneVerifyExpiresAt: null },
+    })
+    revalidatePath('/app/configuracoes')
+    return { success: true }
+  } catch (e) {
+    console.error('unlinkPhone:', e)
+    return { error: 'Erro ao desvincular' }
   }
 }
 

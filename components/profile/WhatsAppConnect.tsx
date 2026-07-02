@@ -1,27 +1,63 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { updatePhone } from '@/app/actions/profile'
+import { startPhoneVerification, getLinkedPhone, unlinkPhone } from '@/app/actions/profile'
+
+function formatPhone(digits: string): string {
+  // 5511963122174 → +55 (11) 96312-2174 (best-effort)
+  const m = digits.match(/^55(\d{2})(\d{4,5})(\d{4})$/)
+  return m ? `+55 (${m[1]}) ${m[2]}-${m[3]}` : `+${digits}`
+}
 
 export default function WhatsAppConnect({ initialPhone }: { initialPhone: string | null }) {
-  const [phone, setPhone] = useState(initialPhone ?? '')
-  const [editing, setEditing] = useState(false)
-  const [saved, setSaved] = useState(initialPhone)
+  const [linked, setLinked] = useState<string | null>(initialPhone)
+  const [code, setCode] = useState<string | null>(null)
+  const [botNumber, setBotNumber] = useState<string | null>(null)
+  const [expiresInMin, setExpiresInMin] = useState<number>(15)
   const [error, setError] = useState<string | null>(null)
+  const [checkMsg, setCheckMsg] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  function handleSave() {
+  function handleStart() {
+    setError(null)
+    setCheckMsg(null)
+    startTransition(async () => {
+      const res = await startPhoneVerification()
+      if (res.error) { setError(res.error); return }
+      setCode(res.code ?? null)
+      setBotNumber(res.botNumber ?? null)
+      setExpiresInMin(res.expiresInMin ?? 15)
+    })
+  }
+
+  function handleCheck() {
     setError(null)
     startTransition(async () => {
-      const res = await updatePhone(phone)
-      if (res.error) {
-        setError(res.error)
+      const res = await getLinkedPhone()
+      if (res.phone) {
+        setLinked(res.phone)
+        setCode(null)
+        setCheckMsg(null)
       } else {
-        setSaved(res.phone ?? phone)
-        setEditing(false)
+        setCheckMsg('Ainda não recebi seu código. Envie a mensagem no WhatsApp e tente de novo.')
       }
     })
   }
+
+  function handleUnlink() {
+    if (!confirm('Desvincular seu número do WhatsApp?')) return
+    setError(null)
+    startTransition(async () => {
+      const res = await unlinkPhone()
+      if (res.error) { setError(res.error); return }
+      setLinked(null)
+      setCode(null)
+    })
+  }
+
+  const waLink = code && botNumber
+    ? `https://wa.me/${botNumber}?text=${encodeURIComponent(code)}`
+    : null
 
   return (
     <div className="p-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
@@ -34,58 +70,77 @@ export default function WhatsAppConnect({ initialPhone }: { initialPhone: string
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium">WhatsApp</p>
           <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            {saved ? `Vinculado: ${saved}` : 'Registre treinos e refeições por mensagem'}
+            {linked ? `Vinculado: ${formatPhone(linked)}` : 'Registre treinos e refeições por mensagem'}
           </p>
         </div>
-        {!editing && (
+        {linked && !code && (
           <button
-            onClick={() => setEditing(true)}
-            className="text-xs px-3 py-1.5 rounded-lg border flex-shrink-0"
-            style={{ borderColor: 'var(--color-border)', color: 'var(--color-primary)' }}
+            onClick={handleUnlink}
+            disabled={isPending}
+            className="text-xs px-3 py-1.5 rounded-lg border flex-shrink-0 disabled:opacity-50"
+            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
           >
-            {saved ? 'Alterar' : 'Conectar'}
+            Desvincular
+          </button>
+        )}
+        {!linked && !code && (
+          <button
+            onClick={handleStart}
+            disabled={isPending}
+            className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0 text-white font-medium disabled:opacity-50"
+            style={{ backgroundColor: 'var(--color-primary)' }}
+          >
+            {isPending ? '...' : 'Conectar'}
           </button>
         )}
       </div>
 
-      {editing && (
-        <div className="mt-3">
-          <label className="block text-xs mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
-            Número com DDI + DDD (ex: 5511999999999)
-          </label>
+      {/* Passo a passo com o código gerado */}
+      {code && (
+        <div className="mt-3 rounded-xl border p-4" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)' }}>
+          <p className="text-xs mb-2" style={{ color: 'var(--color-text-muted)' }}>
+            Envie este código pelo <span className="font-medium">seu WhatsApp</span> para o número do FitSync
+            {botNumber ? ` (${formatPhone(botNumber)})` : ''}. Vale por {expiresInMin} min.
+          </p>
+          <div
+            className="text-center text-xl font-medium tracking-widest py-2.5 rounded-lg mb-3 select-all"
+            style={{ backgroundColor: 'var(--color-background)', border: '1px dashed var(--color-border)' }}
+          >
+            {code}
+          </div>
           <div className="flex gap-2">
-            <input
-              type="tel"
-              inputMode="numeric"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="5511999999999"
-              autoFocus
-              className="flex-1 text-sm px-3 py-2.5 rounded-lg border outline-none"
-              style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)' }}
-            />
+            {waLink && (
+              <a
+                href={waLink}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 text-center text-sm py-2.5 rounded-lg text-white font-medium"
+                style={{ backgroundColor: '#22c55e' }}
+              >
+                Abrir WhatsApp
+              </a>
+            )}
             <button
-              onClick={handleSave}
+              onClick={handleCheck}
               disabled={isPending}
-              className="text-sm px-4 py-2.5 rounded-lg text-white font-medium disabled:opacity-50"
-              style={{ backgroundColor: 'var(--color-primary)' }}
+              className="flex-1 text-sm py-2.5 rounded-lg border font-medium disabled:opacity-50"
+              style={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
             >
-              {isPending ? 'Salvando...' : 'Salvar'}
-            </button>
-            <button
-              onClick={() => { setEditing(false); setError(null); setPhone(saved ?? '') }}
-              className="text-sm px-3 py-2.5 rounded-lg border"
-              style={{ borderColor: 'var(--color-border)' }}
-            >
-              Cancelar
+              {isPending ? 'Verificando...' : 'Já enviei'}
             </button>
           </div>
-          {error && <p className="text-xs mt-2" style={{ color: 'var(--color-alert, #E24B4A)' }}>{error}</p>}
-          <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
-            Depois de salvar, envie uma mensagem para o número do FitSync no WhatsApp para registrar treinos e refeições.
-          </p>
+          {checkMsg && <p className="text-xs mt-2" style={{ color: 'var(--color-fat, #EF9F27)' }}>{checkMsg}</p>}
+          <button
+            onClick={() => { setCode(null); setCheckMsg(null) }}
+            className="text-xs mt-2"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            Cancelar
+          </button>
         </div>
       )}
+
+      {error && <p className="text-xs mt-2" style={{ color: 'var(--color-alert, #E24B4A)' }}>{error}</p>}
     </div>
   )
 }
