@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import ProfileGoalsEditor from '@/components/profile/ProfileGoalsEditor'
 import WhatsAppConnect from '@/components/profile/WhatsAppConnect'
+import { isAdminEmail } from '@/lib/admin'
 
 export default async function ConfiguracoesPage() {
   const supabase = await createClient()
@@ -87,6 +88,21 @@ export default async function ConfiguracoesPage() {
           </svg>
         </Link>
         <WhatsAppConnect initialPhone={dbUser.phone} />
+        {isAdminEmail(user.email) && (
+          <Link href="/app/admin" className="flex items-center justify-between p-4 border-t transition-colors hover:bg-gray-50 dark:hover:bg-gray-900" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#FDECEC' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-alert, #E24B4A)" strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+              </div>
+              <span className="text-sm">Painel admin</span>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--color-text-muted)' }}>
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </Link>
+        )}
       </div>
     </div>
   )
