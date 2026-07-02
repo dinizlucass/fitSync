@@ -101,9 +101,9 @@ export default async function HojePage() {
     ? latestWeight.weightKg - oldWeight.weightKg
     : null
 
-  // Feature 8 — Smart workout suggestion
+  // Feature 8 — Smart workout suggestion (só treinos com exercícios; exclui "Treino avulso")
   const workouts = await prisma.workout.findMany({
-    where: { userId: dbUser.id },
+    where: { userId: dbUser.id, exercises: { some: {} } },
     include: {
       exercises: { take: 3, include: { exercise: true } },
       sessions: { orderBy: { date: 'desc' }, take: 1 },

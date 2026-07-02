@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { sendWhatsAppMessage, downloadMetaMedia } from '@/lib/whatsapp'
 import { analyzeFoodImage } from '@/lib/openai'
 import { runCoach } from '@/lib/coach/coach'
+import { dayRange } from '@/lib/coach/shared'
 
 /**
  * Verifica a assinatura HMAC-SHA256 do corpo bruto contra o header
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       await sendWhatsAppMessage(from,
-        '👋 Olá! Para usar o FitSync pelo WhatsApp, cadastre seu número no app em *Configurações*.\n\nAcesse: fitsync.app'
+        '👋 Olá! Para usar o FitSync pelo WhatsApp, cadastre seu número no app em *Configurações → WhatsApp*.\n\nAcesse: https://fit-sync-eight-zeta.vercel.app'
       )
       return Response.json({ status: 'user_not_found' })
     }
@@ -97,18 +98,19 @@ export async function POST(request: NextRequest) {
 
         const parsed = await analyzeFoodImage(imageUrl)
 
-        const today = new Date()
+        // Dia no fuso America/Sao_Paulo (evita a refeição cair no dia seguinte à noite)
+        const { start, end } = dayRange()
         let mealLog = await prisma.mealLog.findFirst({
           where: {
             userId: user.id,
             mealType: 'SNACK',
-            date: { gte: new Date(today.setHours(0, 0, 0, 0)) },
+            date: { gte: start, lte: end },
           },
         })
 
         if (!mealLog) {
           mealLog = await prisma.mealLog.create({
-            data: { userId: user.id, date: new Date(), mealType: 'SNACK' },
+            data: { userId: user.id, date: start, mealType: 'SNACK' },
           })
         }
 

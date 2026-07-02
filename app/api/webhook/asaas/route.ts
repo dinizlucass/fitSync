@@ -27,10 +27,11 @@ function statusForEvent(event: string): string | null {
 }
 
 export async function POST(request: NextRequest) {
-  // Validação do token (quando configurado)
+  // Validação do token — fail-closed: sem ASAAS_WEBHOOK_TOKEN configurado,
+  // o endpoint recusa tudo (evita aceitar eventos forjados antes do setup).
   const expected = process.env.ASAAS_WEBHOOK_TOKEN
   const received = request.headers.get('asaas-access-token')
-  if (expected && received !== expected) {
+  if (!expected || received !== expected) {
     return Response.json({ error: 'Invalid token' }, { status: 401 })
   }
 

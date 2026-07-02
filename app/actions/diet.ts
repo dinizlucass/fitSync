@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { startOfDay, endOfDay } from 'date-fns'
+import { dayRange } from '@/lib/coach/shared'
 
 // Seed foods for search fallback
 const SEED_FOODS = [
@@ -149,7 +150,19 @@ export async function removeMealItem(id: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
 
+  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
+  if (!dbUser) return { error: 'Usuário não encontrado' }
+
   try {
+    // Segurança (IDOR): só permite remover itens do próprio usuário
+    const item = await prisma.mealItem.findUnique({
+      where: { id },
+      include: { mealLog: { select: { userId: true } } },
+    })
+    if (!item || item.mealLog.userId !== dbUser.id) {
+      return { error: 'Item não encontrado' }
+    }
+
     await prisma.mealItem.delete({ where: { id } })
     revalidatePath('/app/dieta')
     revalidatePath('/app/hoje')
@@ -173,9 +186,10 @@ export async function updateMealItem(data: { itemId: string; newQuantityG: numbe
   try {
     const item = await prisma.mealItem.findUnique({
       where: { id: data.itemId },
-      include: { food: true },
+      include: { food: true, mealLog: { select: { userId: true } } },
     })
-    if (!item) return { error: 'Item não encontrado' }
+    // Segurança (IDOR): só permite editar itens do próprio usuário
+    if (!item || item.mealLog.userId !== dbUser.id) return { error: 'Item não encontrado' }
 
     await prisma.mealItem.update({
       where: { id: data.itemId },
@@ -213,7 +227,9 @@ export async function saveDietPlanAction(meals: Array<{
   if (!dbUser) return { success: false, error: 'Usuário não encontrado' }
 
   try {
-    const today = startOfDay(new Date())
+    // Dia no fuso America/Sao_Paulo — startOfDay(new Date()) no servidor é UTC
+    // e à noite (BRT) jogaria o cardápio no dia seguinte
+    const today = dayRange().start
 
     for (const meal of meals) {
       const mealType = mealNameToType(meal.name)

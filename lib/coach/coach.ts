@@ -33,12 +33,19 @@ export async function runCoach({ userId, message, channel = 'whatsapp' }: RunCoa
 
   const historyAsc = [...history].reverse()
 
+  // Carimbo de data/hora (São Paulo) em cada mensagem do histórico.
+  // Sem isso o modelo mistura registros de dias anteriores com "hoje".
+  const stamp = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  })
+
   const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: COACH_SYSTEM_PROMPT },
     { role: 'system', content: formatUserContext(ctx) },
     ...historyAsc.map(m => ({
       role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
-      content: m.content,
+      content: `[${'createdAt' in m && m.createdAt ? stamp.format(m.createdAt as Date) : 'anterior'}] ${m.content}`,
     })),
     { role: 'user', content: message },
   ]

@@ -119,20 +119,43 @@ export const TOOL_DEFINITIONS = [
       parameters: {
         type: 'object',
         properties: {
-          refeicao: { type: 'string', description: 'Ex: café, almoço, lanche, jantar.' },
+          refeicao: { type: 'string', description: 'Ex: café da manhã, almoço, lanche, jantar, ceia.' },
           itens: {
             type: 'array',
             items: {
               type: 'object',
               properties: {
                 alimento: { type: 'string' },
-                quantidade_g: { type: 'number' },
+                quantidade: {
+                  type: 'string',
+                  description:
+                    "A quantidade EXATAMENTE como o usuário disse: '2 fatias', '5 colheres', '2 unidades', '150g'. NUNCA converta unidades (fatias/colheres/unidades) em gramas — a conversão é feita depois.",
+                },
+                quantidade_g: {
+                  type: 'number',
+                  description: 'APENAS se o usuário informou o peso em gramas (ex: "200g"). Não use para unidades.',
+                },
               },
               required: ['alimento'],
             },
           },
         },
         required: ['itens'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'remover_refeicao_hoje',
+      description:
+        'Remove TODOS os itens de uma refeição registrada HOJE (ex: apagar um registro errado antes de re-registrar corrigido). Use quando o usuário corrigir um registro ou pedir pra apagar.',
+      parameters: {
+        type: 'object',
+        properties: {
+          refeicao: { type: 'string', description: 'Qual refeição de hoje remover: café da manhã, almoço, lanche, pré-treino, jantar, pós-treino ou ceia.' },
+        },
+        required: ['refeicao'],
       },
     },
   },
@@ -212,7 +235,9 @@ export async function executeTool(name: string, args: ToolArgs, userId: string):
       case 'sugerir_alimentos_para_meta':
         return sugerirAlimentos(args.macro_alvo as string, Number(args.quantidade_faltante))
       case 'registrar_refeicao':
-        return await registrarRefeicao(userId, args.refeicao as string | undefined, (args.itens as Array<{ alimento: string; quantidade_g?: number }>) ?? [])
+        return await registrarRefeicao(userId, args.refeicao as string | undefined, (args.itens as Array<{ alimento: string; quantidade?: string; quantidade_g?: number }>) ?? [])
+      case 'remover_refeicao_hoje':
+        return await removerRefeicaoHoje(userId, args.refeicao as string)
       case 'registrar_treino':
         return await registrarTreino(userId, (args.exercicios as Array<{ nome: string; series?: number; reps?: number; carga_kg?: number }>) ?? [])
       case 'trocar_treino_do_dia':
@@ -276,8 +301,9 @@ async function getResumoNutricional(userId: string, data?: string): Promise<stri
 
 async function getTreinoDoDia(userId: string): Promise<string> {
   const { start, end } = dayRange()
+  // exclui "Treino avulso" (0 exercícios) — não é um plano de verdade
   const workout = await prisma.workout.findFirst({
-    where: { userId },
+    where: { userId, exercises: { some: {} } },
     orderBy: { createdAt: 'desc' },
     include: { exercises: { include: { exercise: true }, orderBy: { order: 'asc' } } },
   })
@@ -306,7 +332,7 @@ async function getTreinoDoDia(userId: string): Promise<string> {
 
 async function listarTreinos(userId: string): Promise<string> {
   const workouts = await prisma.workout.findMany({
-    where: { userId },
+    where: { userId, exercises: { some: {} } },
     orderBy: { createdAt: 'desc' },
     include: { _count: { select: { exercises: true } } },
   })
@@ -349,12 +375,18 @@ function sugerirAlimentos(macroAlvo: string, faltante: number): string {
 async function registrarRefeicao(
   userId: string,
   refeicao: string | undefined,
-  itens: Array<{ alimento: string; quantidade_g?: number }>,
+  itens: Array<{ alimento: string; quantidade?: string; quantidade_g?: number }>,
 ): Promise<string> {
   if (!itens.length) return JSON.stringify({ erro: 'Nenhum alimento informado.' })
 
+  // Prioriza o texto livre ("2 fatias") — a IA nutricional converte pra gramas.
+  // quantidade_g só quando o usuário realmente informou peso em gramas.
   const text = itens
-    .map(i => (i.quantidade_g ? `${i.quantidade_g}g de ${i.alimento}` : i.alimento))
+    .map(i => {
+      if (i.quantidade) return `${i.quantidade} de ${i.alimento}`
+      if (i.quantidade_g) return `${i.quantidade_g}g de ${i.alimento}`
+      return i.alimento
+    })
     .join(', ')
   const parsed = await parseMealMessage(text)
   if (!parsed.items.length) return JSON.stringify({ erro: 'Não consegui estimar os macros desses alimentos.' })
@@ -389,6 +421,30 @@ async function registrarRefeicao(
     },
     itens: parsed.items.map(i => `${i.name} (${round(i.quantityG)}g)`),
   })
+}
+
+async function removerRefeicaoHoje(userId: string, refeicao: string): Promise<string> {
+  if (!refeicao) return JSON.stringify({ erro: 'Informe qual refeição remover.' })
+
+  const mealType = mealNameToType(refeicao)
+  const { start, end } = dayRange()
+
+  const logs = await prisma.mealLog.findMany({
+    where: { userId, mealType, date: { gte: start, lte: end } },
+    include: { _count: { select: { items: true } } },
+  })
+
+  if (logs.length === 0) {
+    return JSON.stringify({ aviso: `Nenhum registro de ${refeicao} encontrado hoje.` })
+  }
+
+  const removidos = logs.reduce((s, l) => s + l._count.items, 0)
+  // deleteMany no MealLog cascateia os MealItems (onDelete: Cascade)
+  await prisma.mealLog.deleteMany({
+    where: { id: { in: logs.map(l => l.id) } },
+  })
+
+  return JSON.stringify({ sucesso: true, refeicao_removida: mealType, itens_removidos: removidos })
 }
 
 async function registrarTreino(

@@ -102,9 +102,10 @@ export async function buildUserContext(userId: string): Promise<UserContext> {
     gordura_g: metaFat != null ? round(metaFat - consumido.gordura_g) : 0,
   }
 
-  // ── Treino do dia (plano ativo = mais recente) ─────────────────────
+  // ── Treino do dia (plano ativo = mais recente COM exercícios) ──────
+  // exclui "Treino avulso" (0 exercícios, criado por registros livres do WhatsApp)
   const latestWorkout = await prisma.workout.findFirst({
-    where: { userId },
+    where: { userId, exercises: { some: {} } },
     orderBy: { createdAt: 'desc' },
     include: {
       exercises: { include: { exercise: true }, orderBy: { order: 'asc' } },
@@ -175,5 +176,10 @@ Hoje (${ctx.hoje.data}):
 
 Últimos 7 dias: ${ctx.ultimos_7_dias.treinos_feitos} treino(s) registrado(s).
 
-Para recalcular após uma ação, ver detalhes ou histórico antigo, use as tools — não estime de cabeça.`
+Para recalcular após uma ação, ver detalhes ou histórico antigo, use as tools — não estime de cabeça.
+
+ATENÇÃO SOBRE O HISTÓRICO: as mensagens anteriores têm carimbo [dd/mm hh:mm] e podem ser de
+DIAS ANTERIORES. Registros mencionados nelas NÃO contam como registros de hoje. A lista de
+"Refeições registradas" acima é a ÚNICA fonte de verdade do que foi registrado hoje — se algo
+não está nela, não foi registrado hoje. Nunca escreva carimbos [data] nas suas respostas.`
 }
