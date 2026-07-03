@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -30,6 +30,15 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null)
 
   const supabase = createClient()
+
+  // Erro vindo do callback OAuth (?error=oauth) — lido via window pra não
+  // exigir Suspense de useSearchParams no prerender
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('error') === 'oauth') {
+      setError('Não foi possível entrar com o Google. Tente novamente ou use e-mail e senha.')
+      window.history.replaceState({}, '', '/login')
+    }
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -79,10 +88,12 @@ export default function LoginPage() {
   async function handleGoogleLogin() {
     setLoading(true)
     setError(null)
+    // O code do OAuth é trocado por sessão no servidor em /auth/callback —
+    // redirecionar direto pra /app/* faria o proxy derrubar antes da troca.
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/app/hoje`,
+        redirectTo: `${window.location.origin}/auth/callback?next=/app/hoje`,
       },
     })
     if (error) {
