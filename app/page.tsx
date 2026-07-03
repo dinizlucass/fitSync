@@ -25,12 +25,12 @@ export default function LandingPage() {
               <a href="#planos" className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Planos</a>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Link href="/login" className="hidden sm:inline-flex text-sm px-4 py-2 rounded-lg border transition-colors hover:bg-gray-50 dark:hover:bg-gray-900" style={{ borderColor: 'var(--color-border)' }}>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link href="/login" className="inline-flex text-sm px-3 sm:px-4 py-2 rounded-lg border transition-colors hover:bg-gray-50 dark:hover:bg-gray-900" style={{ borderColor: 'var(--color-border)' }}>
               Entrar
             </Link>
-            <Link href="/login" className="inline-flex text-sm px-4 py-2 rounded-lg text-white font-medium transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--color-primary)' }}>
-              Começar grátis
+            <Link href="/login?tab=signup" className="inline-flex text-sm px-3 sm:px-4 py-2 rounded-lg text-white font-medium transition-opacity hover:opacity-90 whitespace-nowrap" style={{ backgroundColor: 'var(--color-primary)' }}>
+              7 dias grátis
             </Link>
           </div>
         </div>
@@ -59,7 +59,7 @@ export default function LandingPage() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 mb-12">
-              <Link href="/login" className="inline-flex items-center justify-center text-sm px-6 py-3 rounded-lg text-white font-medium transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--color-primary)' }}>
+              <Link href="/login?tab=signup" className="inline-flex items-center justify-center text-sm px-6 py-3 rounded-lg text-white font-medium transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--color-primary)' }}>
                 Testar grátis por {monthly.trialDays} dias
               </Link>
               <a href="#como-funciona" className="inline-flex items-center justify-center text-sm px-6 py-3 rounded-lg border transition-colors hover:bg-gray-50 dark:hover:bg-gray-900" style={{ borderColor: 'var(--color-border)' }}>
@@ -354,7 +354,7 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/login" className="block text-center text-sm py-2.5 px-4 rounded-lg border transition-colors hover:bg-gray-50 dark:hover:bg-gray-900" style={{ borderColor: 'var(--color-border)' }}>
+              <Link href="/login?tab=signup" className="block text-center text-sm py-2.5 px-4 rounded-lg border transition-colors hover:bg-gray-50 dark:hover:bg-gray-900" style={{ borderColor: 'var(--color-border)' }}>
                 Começar {monthly.trialDays} dias grátis
               </Link>
             </div>
@@ -381,7 +381,7 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/login" className="block text-center text-sm py-2.5 px-4 rounded-lg text-white font-medium transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--color-primary)' }}>
+              <Link href="/login?tab=signup" className="block text-center text-sm py-2.5 px-4 rounded-lg text-white font-medium transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--color-primary)' }}>
                 Começar {annual.trialDays} dias grátis
               </Link>
             </div>
@@ -398,7 +398,7 @@ export default function LandingPage() {
           <p className="text-base mb-8" style={{ color: 'var(--color-text-muted)' }}>
             Treino, dieta e coach por IA no seu WhatsApp. Teste {monthly.trialDays} dias sem pagar nada.
           </p>
-          <Link href="/login" className="inline-flex items-center text-sm px-8 py-3.5 rounded-lg text-white font-medium transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--color-primary)' }}>
+          <Link href="/login?tab=signup" className="inline-flex items-center text-sm px-8 py-3.5 rounded-lg text-white font-medium transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--color-primary)' }}>
             Começar {monthly.trialDays} dias grátis
           </Link>
         </div>

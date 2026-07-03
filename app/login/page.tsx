@@ -31,10 +31,13 @@ export default function LoginPage() {
 
   const supabase = createClient()
 
-  // Erro vindo do callback OAuth (?error=oauth) — lido via window pra não
-  // exigir Suspense de useSearchParams no prerender
+  // Params lidos via window pra não exigir Suspense de useSearchParams no prerender:
+  // ?error=oauth (falha no Google) e ?tab=signup (CTAs da landing abrem direto no cadastro)
   useEffect(() => {
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('error') === 'oauth') {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('tab') === 'signup') setTab('signup')
+    if (params.get('error') === 'oauth') {
       setError('Não foi possível entrar com o Google. Tente novamente ou use e-mail e senha.')
       window.history.replaceState({}, '', '/login')
     }
@@ -117,7 +120,7 @@ export default function LoginPage() {
             <span style={{ color: 'var(--color-primary)' }}>Sync</span>
           </span>
           <p className="text-sm mt-2" style={{ color: 'var(--color-text-muted)' }}>
-            {tab === 'login' ? 'Bem-vindo de volta' : tab === 'signup' ? 'Crie sua conta grátis' : 'Recupere seu acesso'}
+            {tab === 'login' ? 'Bem-vindo de volta' : tab === 'signup' ? 'Comece seus 7 dias grátis' : 'Recupere seu acesso'}
           </p>
         </div>
 
@@ -247,8 +250,14 @@ export default function LoginPage() {
               className="w-full text-sm py-2.5 px-4 rounded-lg text-white font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ backgroundColor: 'var(--color-primary)' }}
             >
-              {loading ? 'Aguarde...' : tab === 'login' ? 'Entrar' : tab === 'signup' ? 'Criar conta' : 'Enviar link de redefinição'}
+              {loading ? 'Aguarde...' : tab === 'login' ? 'Entrar' : tab === 'signup' ? 'Começar 7 dias grátis' : 'Enviar link de redefinição'}
             </button>
+
+            {tab === 'signup' && (
+              <p className="text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
+                7 dias grátis com acesso completo. Sem cartão agora — cancele quando quiser.
+              </p>
+            )}
 
             {tab === 'forgot' && (
               <button
