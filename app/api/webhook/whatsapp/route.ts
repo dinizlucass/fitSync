@@ -106,9 +106,10 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://fit-sync-eight-zeta.vercel.app'
       await sendWhatsAppMessage(from,
         '👋 Olá! Para usar o FitSync pelo WhatsApp:\n\n' +
-        '1. Acesse https://fit-sync-eight-zeta.vercel.app\n' +
+        `1. Acesse ${appUrl}\n` +
         '2. Vá em *Configurações → WhatsApp → Conectar*\n' +
         '3. Envie aqui o código que aparecer (ex: FIT-123456)\n\n' +
         'Pronto! Seu número fica vinculado à sua conta.'
