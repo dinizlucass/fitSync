@@ -195,7 +195,7 @@ export async function adminCreateUser(params: {
     // Convite por e-mail com link seguro de definição de senha (melhor que
     // compartilhar a senha em texto). No-op se RESEND_API_KEY não estiver setada.
     try {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://fit-sync-eight-zeta.vercel.app'
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.fitsync.app.br'
       const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
         type: 'recovery',
         email,

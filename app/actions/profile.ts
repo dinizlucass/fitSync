@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateTDEE, calculateMacros } from '@/lib/calculations'
 import { revalidatePath } from 'next/cache'
 import { sendWelcomeEmail } from '@/lib/email'
+import { SUBSCRIPTION_ENFORCED, ACTIVE_STATUSES } from '@/lib/asaas/config'
 
 type GoalType = 'GAIN_MUSCLE' | 'LOSE_FAT' | 'RECOMPOSITION' | 'MAINTAIN'
 type ActivityLevel = 'SEDENTARY' | 'LIGHT' | 'MODERATE' | 'ACTIVE' | 'VERY_ACTIVE'
@@ -23,6 +24,19 @@ export async function saveGoals(data: SaveGoalsInput) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
 
+  // Validação de sanidade — evita metas absurdas por erro de digitação
+  if (!data.weightKg || data.weightKg < 30 || data.weightKg > 300) {
+    return { error: 'Peso inválido. Informe um valor entre 30 e 300 kg.' }
+  }
+  if (!data.heightCm || data.heightCm < 120 || data.heightCm > 230) {
+    return { error: 'Altura inválida. Informe um valor entre 120 e 230 cm.' }
+  }
+  const birth = new Date(data.birthDate)
+  const ageCheck = (Date.now() - birth.getTime()) / (365.25 * 86400_000)
+  if (isNaN(birth.getTime()) || ageCheck < 13 || ageCheck > 100) {
+    return { error: 'Data de nascimento inválida.' }
+  }
+
   let dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
 
   if (!dbUser) {
@@ -37,10 +51,9 @@ export async function saveGoals(data: SaveGoalsInput) {
     if (user.email) void sendWelcomeEmail(user.email, user.user_metadata?.name)
   }
 
-  // Calculate age
+  // Idade precisa (considera mês/dia — só ano inflava o TDEE de quem ainda não fez aniversário)
   const birthDate = new Date(data.birthDate)
-  const today = new Date()
-  const age = today.getFullYear() - birthDate.getFullYear()
+  const age = Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 86400_000))
 
   // Calculate TDEE and macros
   const tdee = calculateTDEE(data.weightKg, data.heightCm, age, data.activityLevel, data.sex)
@@ -85,7 +98,16 @@ export async function saveGoals(data: SaveGoalsInput) {
 
     revalidatePath('/app/hoje')
     revalidatePath('/app/configuracoes')
-    return { success: true }
+
+    // Rota pós-onboarding: com o bloqueio de assinatura ligado, o próximo
+    // passo do funil é escolher o plano (trial), não o dashboard.
+    let mustSubscribe = false
+    if (SUBSCRIPTION_ENFORCED) {
+      const sub = await prisma.subscription.findUnique({ where: { userId: dbUser.id } }).catch(() => null)
+      mustSubscribe = !sub || !ACTIVE_STATUSES.includes(sub.status as never)
+    }
+
+    return { success: true, mustSubscribe }
   } catch (e) {
     console.error(e)
     return { error: 'Erro ao salvar metas' }

@@ -25,6 +25,13 @@ export function saoPauloDateStr(d: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d)
 }
 
+/** Hora atual (HH:mm) no fuso America/Sao_Paulo. */
+export function saoPauloTimeStr(d: Date = new Date()): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(d)
+}
+
 /**
  * Intervalo [início, fim] de um dia para consultas no Prisma.
  * Usa o truque T12:00:00 já adotado em copyMealsFromYesterday/applyTemplate

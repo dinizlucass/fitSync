@@ -68,7 +68,7 @@ export default function LoginPage() {
         router.refresh()
       }
     } else {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -77,7 +77,12 @@ export default function LoginPage() {
       })
       if (error) {
         setError(traduzirErroAuth(error.message))
+      } else if (data.session) {
+        // Autoconfirmação ligada: já saiu logado — entra direto no onboarding
+        router.push('/app/hoje')
+        router.refresh()
       } else {
+        // Confirmação por e-mail exigida (caso a config mude no Supabase)
         setMessage('Conta criada! Verifique seu email para confirmar o cadastro.')
       }
     }

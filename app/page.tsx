@@ -271,7 +271,7 @@ export default function LandingPage() {
               <div className="space-y-6">
                 {[
                   { step: '01', title: 'Crie sua conta', desc: 'Configure seus objetivos, peso, altura e nível de atividade.' },
-                  { step: '02', title: 'Conecte o WhatsApp', desc: 'Adicione nosso número e comece a mandar mensagens naturalmente.' },
+                  { step: '02', title: 'Conecte o WhatsApp', desc: 'Um clique em Configurações gera seu código — envie pro nosso número e pronto, vinculado.' },
                   { step: '03', title: 'Registre tudo', desc: 'Diga "fiz supino 4x8 80kg" ou mande foto do prato. A IA cuida do resto.' },
                   { step: '04', title: 'Acompanhe a evolução', desc: 'Veja gráficos, recordes e receba insights semanais personalizados.' },
                 ].map((item) => (

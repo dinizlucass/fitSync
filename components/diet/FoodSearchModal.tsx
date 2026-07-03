@@ -50,6 +50,7 @@ export default function FoodSearchModal({ mealType, date, onClose, onAdded }: Fo
   const [selectedFood, setSelectedFood] = useState<Food | null>(null)
   const [quantity, setQuantity] = useState('100')
   const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Feature 6 — Recent foods
@@ -88,10 +89,11 @@ export default function FoodSearchModal({ mealType, date, onClose, onAdded }: Fo
   async function handleAdd() {
     if (!selectedFood) return
     setAdding(true)
+    setAddError(null)
     const qty = parseFloat(quantity)
     if (!qty || qty <= 0) { setAdding(false); return }
 
-    await addMealItem({
+    const res = await addMealItem({
       foodId: selectedFood.id,
       foodName: selectedFood.name,
       mealType,
@@ -103,10 +105,16 @@ export default function FoodSearchModal({ mealType, date, onClose, onAdded }: Fo
       fatG: calcNutrient(selectedFood.fatG, qty, selectedFood.servingSize),
     })
 
+    setAdding(false)
+
+    // Antes o erro era engolido: o modal fechava e o item simplesmente não aparecia
+    if (res && 'error' in res && res.error) {
+      setAddError(res.error)
+      return
+    }
+
     // Feature 6 — Update recent foods in localStorage
     saveRecentFood(selectedFood)
-
-    setAdding(false)
     onAdded()
   }
 
@@ -287,6 +295,11 @@ export default function FoodSearchModal({ mealType, date, onClose, onAdded }: Fo
                 </div>
               </div>
 
+              {addError && (
+                <p className="text-xs p-3 rounded-lg mb-3" style={{ backgroundColor: '#fef2f2', color: 'var(--color-alert, #E24B4A)' }}>
+                  {addError}
+                </p>
+              )}
               <button
                 onClick={handleAdd}
                 disabled={adding || !qty}

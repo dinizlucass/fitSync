@@ -1,8 +1,13 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { format } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
+import { saoPauloDateStr } from '@/lib/coach/shared'
+
+// Datas exibidas sempre no fuso do usuário (SP) — toISOString/format usam UTC
+// no servidor e jogavam registros da noite para o dia seguinte
+const fmtDiaMes = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo', day: 'numeric', month: 'short',
+})
 
 function getPeriodStart(period: string): Date {
   const now = new Date()
@@ -68,10 +73,10 @@ export async function GET(request: NextRequest) {
 
   // Consistency: unique days with any activity in period
   const daysDiff = Math.ceil((Date.now() - periodStart.getTime()) / 86400000)
-  const activeDays = new Set(sessions.map(s => s.date.toISOString().split('T')[0])).size
+  const activeDays = new Set(sessions.map(s => saoPauloDateStr(s.date))).size
   const consistency = Math.round((activeDays / daysDiff) * 100)
 
-  const trainingDays = [...new Set(sessions.map(s => s.date.toISOString().split('T')[0]))]
+  const trainingDays = [...new Set(sessions.map(s => saoPauloDateStr(s.date)))]
 
   return Response.json({
     currentWeight: latestWeight?.weightKg ?? null,
@@ -79,7 +84,7 @@ export async function GET(request: NextRequest) {
     totalSessions: sessions.length,
     consistency,
     weightHistory: weightLogs.map(w => ({
-      date: w.date.toISOString().split('T')[0],
+      date: saoPauloDateStr(w.date),
       weight: w.weightKg,
     })),
     exercises: exercises.map(ex => ({ id: ex.id, name: ex.name })),
@@ -87,7 +92,7 @@ export async function GET(request: NextRequest) {
       exercise: pr.exercise.name,
       weight: pr.weightKg ?? 0,
       reps: pr.reps ?? 0,
-      date: format(pr.session.date, "d 'de' MMM", { locale: ptBR }),
+      date: fmtDiaMes.format(pr.session.date),
     })),
     trainingDays,
   })

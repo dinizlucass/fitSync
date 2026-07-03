@@ -9,6 +9,7 @@ import {
   LEVEL_LABELS_PT,
   dayRange,
   saoPauloDateStr,
+  saoPauloTimeStr,
   scaleMacros,
   round,
 } from '@/lib/coach/shared'
@@ -168,7 +169,7 @@ Perfil: ${ctx.nome ?? 'sem nome'} | Objetivo: ${ctx.objetivo} | Nível: ${ctx.ni
 
 Metas diárias: ${semMeta ? 'NÃO CONFIGURADAS (oriente o usuário a definir metas no app)' : `${ctx.metas_diarias.kcal} kcal | Proteína ${ctx.metas_diarias.proteina_g}g | Carbo ${ctx.metas_diarias.carbo_g}g | Gordura ${ctx.metas_diarias.gordura_g}g`}
 
-Hoje (${ctx.hoje.data}):
+Hoje (${ctx.hoje.data}, agora são ${saoPauloTimeStr()} em São Paulo):
 - Refeições registradas: ${ctx.hoje.refeicoes_registradas.length > 0 ? ctx.hoje.refeicoes_registradas.map(r => `${r.nome} (${r.kcal}kcal, ${r.proteina_g}g prot)`).join('; ') : 'nenhuma ainda'}
 - Consumido: ${ctx.hoje.consumido.kcal} kcal | P:${ctx.hoje.consumido.proteina_g}g C:${ctx.hoje.consumido.carbo_g}g G:${ctx.hoje.consumido.gordura_g}g
 - Faltante p/ meta: ${semMeta ? '—' : `${ctx.hoje.faltante.kcal} kcal | P:${ctx.hoje.faltante.proteina_g}g C:${ctx.hoje.faltante.carbo_g}g G:${ctx.hoje.faltante.gordura_g}g`}

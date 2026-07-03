@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://fit-sync-eight-zeta.vercel.app'
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.fitsync.app.br'
       await sendWhatsAppMessage(from,
         '👋 Olá! Para usar o FitSync pelo WhatsApp:\n\n' +
         `1. Acesse ${appUrl}\n` +
@@ -151,17 +151,29 @@ export async function POST(request: NextRequest) {
 
         // Dia no fuso America/Sao_Paulo (evita a refeição cair no dia seguinte à noite)
         const { start, end } = dayRange()
+
+        // Refeição inferida pelo horário de SP (antes caía sempre em "Lanche")
+        const spHour = parseInt(new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false,
+        }).format(new Date()), 10) % 24
+        const mealType =
+          spHour < 10 ? 'BREAKFAST' as const
+          : spHour < 14 ? 'LUNCH' as const
+          : spHour < 17 ? 'SNACK' as const
+          : spHour < 21 ? 'DINNER' as const
+          : 'CEIA' as const
+
         let mealLog = await prisma.mealLog.findFirst({
           where: {
             userId: user.id,
-            mealType: 'SNACK',
+            mealType,
             date: { gte: start, lte: end },
           },
         })
 
         if (!mealLog) {
           mealLog = await prisma.mealLog.create({
-            data: { userId: user.id, date: start, mealType: 'SNACK' },
+            data: { userId: user.id, date: start, mealType },
           })
         }
 

@@ -8,7 +8,11 @@
  */
 import { reportError } from '@/lib/monitoring'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://fit-sync-eight-zeta.vercel.app'
+// Lida em tempo de CHAMADA (não no load do módulo) — const de módulo congelava
+// a URL antes de envs dinâmicas/testes e gerava e-mails com a URL antiga.
+function appUrl(): string {
+  return process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.fitsync.app.br'
+}
 
 interface SendEmailParams {
   to: string
@@ -65,7 +69,7 @@ function layout(content: string): string {
     </div>
     <p style="text-align:center;font-size:11px;color:#999999;margin-top:16px;">
       FitSync — seu consultor de treino e dieta, direto no bolso.<br/>
-      <a href="${APP_URL}" style="color:#1D9E75;">${APP_URL.replace('https://', '')}</a>
+      <a href="${appUrl()}" style="color:#1D9E75;">${appUrl().replace('https://', '')}</a>
     </p>
   </div>
 </body>
@@ -91,7 +95,7 @@ export function sendWelcomeEmail(to: string, name?: string | null): Promise<bool
         <li style="margin-bottom:8px;"><strong>Conecte o WhatsApp</strong> — em Configurações → WhatsApp. É lá que a mágica acontece.</li>
         <li><strong>Mande sua primeira mensagem</strong> — ex: <em>"almocei arroz, feijão e 200g de frango"</em>. Registrado. Simples assim.</li>
       </ol>
-      <div style="text-align:center;margin-top:20px;">${button(`${APP_URL}/app/configuracoes`, 'Conectar meu WhatsApp')}</div>
+      <div style="text-align:center;margin-top:20px;">${button(`${appUrl()}/app/configuracoes`, 'Conectar meu WhatsApp')}</div>
     `),
   })
 }

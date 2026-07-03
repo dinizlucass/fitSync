@@ -81,7 +81,8 @@ export default function MetasPage() {
         sex,
       })
       if (result.error) { setError(result.error); return }
-      router.push('/app/hoje')
+      // Com o bloqueio de assinatura ligado, o funil segue pro plano (trial)
+      router.push(result.mustSubscribe ? '/app/assinatura' : '/app/hoje')
     } catch {
       setError('Erro ao salvar metas. Tente novamente.')
     } finally {

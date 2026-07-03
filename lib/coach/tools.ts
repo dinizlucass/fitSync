@@ -206,14 +206,13 @@ export const TOOL_DEFINITIONS = [
     function: {
       name: 'ajustar_plano_alimentar_restante',
       description:
-        'Calcula como distribuir o que falta de macros nas refeições restantes do dia e sugere alimentos. Retorna um plano para você apresentar. Use para "como reajusto pra bater minha proteína hoje".',
+        'Monta o plano do resto do dia: identifica pelo HORÁRIO quais refeições ainda faltam, traz os alimentos que o usuário costuma comer em cada uma (histórico de 14 dias) e o alvo de macros por refeição. Use para "como bato minha meta hoje", "planeja o resto do dia", "o que como agora". NÃO pergunte quantas refeições antes — a tool infere sozinha.',
       parameters: {
         type: 'object',
         properties: {
           foco: { type: 'string', enum: ['bater_proteina', 'bater_kcal', 'equilibrar_macros'] },
-          refeicoes_restantes: { type: 'integer', description: 'Quantas refeições ainda vai fazer hoje. Se não souber, pergunte antes.' },
+          refeicoes_restantes: { type: 'integer', description: 'Opcional. Só passe se o usuário DISSE quantas refeições ainda fará; senão a tool infere pelo horário.' },
         },
-        required: ['refeicoes_restantes'],
       },
     },
   },
@@ -243,7 +242,11 @@ export async function executeTool(name: string, args: ToolArgs, userId: string):
       case 'trocar_treino_do_dia':
         return await trocarTreino(userId, args.motivo as string | undefined, args.preferencia as string | undefined)
       case 'ajustar_plano_alimentar_restante':
-        return await ajustarPlano(userId, (args.foco as string) ?? 'equilibrar_macros', Number(args.refeicoes_restantes))
+        return await ajustarPlano(
+          userId,
+          (args.foco as string) ?? 'equilibrar_macros',
+          args.refeicoes_restantes ? Number(args.refeicoes_restantes) : undefined,
+        )
       default:
         return JSON.stringify({ erro: `Tool desconhecida: ${name}` })
     }
@@ -509,36 +512,122 @@ async function trocarTreino(userId: string, motivo?: string, preferencia?: strin
   })
 }
 
-async function ajustarPlano(userId: string, foco: string, refeicoesRestantes: number): Promise<string> {
-  if (!refeicoesRestantes || refeicoesRestantes < 1) {
-    return JSON.stringify({ erro: 'Preciso saber quantas refeições ainda faltam hoje. Pergunte ao usuário.' })
-  }
+// Grade de refeições do app (mesma da página Dieta) com pesos calóricos típicos
+const MEAL_SCHEDULE: Array<{ type: MealTypeEnum; nome: string; hora: string; peso: number; principal: boolean }> = [
+  { type: 'BREAKFAST',    nome: 'Café da manhã', hora: '07:00', peso: 1.2, principal: true },
+  { type: 'LUNCH',        nome: 'Almoço',        hora: '12:30', peso: 1.6, principal: true },
+  { type: 'SNACK',        nome: 'Lanche',        hora: '15:30', peso: 0.8, principal: true },
+  { type: 'PRE_WORKOUT',  nome: 'Pré-treino',    hora: '17:00', peso: 0.6, principal: false },
+  { type: 'DINNER',       nome: 'Jantar',        hora: '19:00', peso: 1.5, principal: true },
+  { type: 'POST_WORKOUT', nome: 'Pós-treino',    hora: '20:00', peso: 0.6, principal: false },
+  { type: 'CEIA',         nome: 'Ceia',          hora: '22:00', peso: 0.7, principal: true },
+]
 
+async function ajustarPlano(userId: string, foco: string, refeicoesRestantes?: number): Promise<string> {
   const ctx = await buildUserContext(userId)
   if (ctx.metas_diarias.kcal == null) {
     return JSON.stringify({ aviso: 'Usuário sem metas definidas. Oriente a configurar em Configurações → Metas.' })
   }
 
-  const falta = ctx.hoje.faltante
-  const porRefeicao = {
-    kcal: round(falta.kcal / refeicoesRestantes),
-    proteina_g: round(falta.proteina_g / refeicoesRestantes),
-    carbo_g: round(falta.carbo_g / refeicoesRestantes),
-    gordura_g: round(falta.gordura_g / refeicoesRestantes),
+  const { start, end } = dayRange()
+  const agora = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date())
+  const horaAtual = parseInt(agora.split(':')[0], 10)
+
+  // Refeições já registradas hoje + histórico de 14 dias em paralelo
+  const since = new Date(Date.now() - 14 * 86400_000)
+  const [logsHoje, historico] = await Promise.all([
+    prisma.mealLog.findMany({
+      where: { userId, date: { gte: start, lte: end } },
+      select: { mealType: true, items: { select: { id: true }, take: 1 } },
+    }),
+    prisma.mealItem.findMany({
+      where: { mealLog: { userId, date: { gte: since } } },
+      include: { food: true, mealLog: { select: { mealType: true } } },
+    }),
+  ])
+
+  const feitasHoje = new Set(logsHoje.filter(l => l.items.length > 0).map(l => l.mealType))
+
+  // Frequência de uso por refeição (para saber se ele costuma fazer pré/pós-treino)
+  const freqPorTipo = new Map<string, number>()
+  // Alimentos habituais: por refeição, top alimentos por frequência com qtde típica
+  const habituais = new Map<string, Map<string, { count: number; qts: number[]; food: (typeof historico)[number]['food'] }>>()
+  for (const item of historico) {
+    const t = item.mealLog.mealType
+    freqPorTipo.set(t, (freqPorTipo.get(t) ?? 0) + 1)
+    if (!habituais.has(t)) habituais.set(t, new Map())
+    const m = habituais.get(t)!
+    const e = m.get(item.food.name) ?? { count: 0, qts: [], food: item.food }
+    e.count++
+    e.qts.push(item.quantityG)
+    m.set(item.food.name, e)
   }
 
-  // Sugestão de alimentos para o foco principal
-  const macroFoco = foco === 'bater_proteina' ? 'proteina' : foco === 'bater_kcal' ? 'kcal' : 'proteina'
-  const faltaFoco = macroFoco === 'kcal' ? falta.kcal : falta.proteina_g
-  const sugestaoFoco = JSON.parse(sugerirAlimentos(macroFoco, faltaFoco))
+  // Slots restantes: principais ainda não feitos e cujo horário não passou (1h de tolerância);
+  // pré/pós-treino só se fazem parte do hábito do usuário
+  let candidatos = MEAL_SCHEDULE.filter(s => {
+    if (feitasHoje.has(s.type)) return false
+    const horaSlot = parseInt(s.hora.split(':')[0], 10)
+    if (horaSlot < horaAtual - 1) return false
+    if (!s.principal && (freqPorTipo.get(s.type) ?? 0) < 3) return false
+    return true
+  })
+  if (refeicoesRestantes && refeicoesRestantes > 0 && refeicoesRestantes < candidatos.length) {
+    candidatos = candidatos.slice(0, refeicoesRestantes)
+  }
+
+  if (candidatos.length === 0) {
+    return JSON.stringify({
+      agora,
+      aviso: 'Pelo horário, não há refeições padrão restantes hoje. Se ele ainda quer comer, sugira uma ceia leve e registre como CEIA.',
+      faltante_total: ctx.hoje.faltante,
+    })
+  }
+
+  // Divide o faltante pelos slots, ponderado pelo peso típico de cada refeição
+  const falta = ctx.hoje.faltante
+  const somaPesos = candidatos.reduce((s, c) => s + c.peso, 0)
+  const mediana = (arr: number[]) => {
+    const a = [...arr].sort((x, y) => x - y)
+    return a[Math.floor(a.length / 2)]
+  }
+
+  const refeicoes_planejadas = candidatos.map(slot => {
+    const frac = slot.peso / somaPesos
+    const habitTop = [...(habituais.get(slot.type)?.entries() ?? [])]
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 4)
+      .map(([nome, e]) => {
+        const qt = round(mediana(e.qts))
+        const m = scaleMacros(e.food, qt)
+        return { alimento: nome, quantidade_tipica_g: qt, kcal: round(m.calories), proteina_g: round(m.proteinG) }
+      })
+    return {
+      refeicao: slot.nome,
+      hora: slot.hora,
+      alvo: {
+        kcal: round(falta.kcal * frac),
+        proteina_g: round(falta.proteina_g * frac),
+        carbo_g: round(falta.carbo_g * frac),
+        gordura_g: round(falta.gordura_g * frac),
+      },
+      alimentos_habituais: habitTop, // vazio = usuário novo, use alimentos comuns BR (TACO)
+    }
+  })
 
   return JSON.stringify({
-    foco,
-    refeicoes_restantes: refeicoesRestantes,
+    agora,
+    foco: foco ?? 'equilibrar_macros',
     faltante_total: falta,
-    alvo_por_refeicao: porRefeicao,
-    sugestoes_para_o_foco: sugestaoFoco.opcoes ?? [],
-    instrucao: 'Monte um plano concreto e curto com base nesses números e ofereça registrar via registrar_refeicao quando ele comer.',
+    refeicoes_ja_feitas_hoje: [...feitasHoje],
+    refeicoes_planejadas,
+    instrucao:
+      'Monte um CARDÁPIO DETALHADO por refeição: cada alimento com quantidade em g/medida caseira + kcal + proteína, ' +
+      'fechando perto do alvo da refeição. Priorize os alimentos_habituais (é o que a pessoa já come); complete com ' +
+      'alimentos comuns no Brasil quando faltar. Se o faltante_total não couber bem nas refeições restantes, sugira ' +
+      'adicionar uma ceia leve e PERGUNTE se ele topa. Ofereça trocar qualquer item.',
   })
 }
 

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { generateWeeklyInsight } from '@/lib/openai'
 import { startOfDay } from 'date-fns'
+import { saoPauloDateStr } from '@/lib/coach/shared'
 
 export async function GET(_request: NextRequest) {
   const supabase = await createClient()
@@ -45,7 +46,7 @@ export async function GET(_request: NextRequest) {
   )
 
   const dailyCalories = mealLogs.reduce<Record<string, number>>((acc, log) => {
-    const dateStr = log.date.toISOString().split('T')[0]
+    const dateStr = saoPauloDateStr(log.date)
     const cals = log.items.reduce<number>((s, item) => {
       const ratio = item.quantityG / item.food.servingSize
       return s + item.food.calories * ratio
@@ -65,8 +66,8 @@ export async function GET(_request: NextRequest) {
   const personalRecords = sessions.flatMap(s => s.sets).filter(s => s.isPersonalRecord).length
 
   const uniqueActiveDays = new Set([
-    ...sessions.map(s => s.date.toISOString().split('T')[0]),
-    ...mealLogs.map(l => l.date.toISOString().split('T')[0]),
+    ...sessions.map(s => saoPauloDateStr(s.date)),
+    ...mealLogs.map(l => saoPauloDateStr(l.date)),
   ]).size
   const consistency = Math.round((uniqueActiveDays / 7) * 100)
 

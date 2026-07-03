@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
+import { saoPauloDateStr } from '@/lib/coach/shared'
 
 function getPeriodStart(period: string): Date {
   const now = new Date()
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
   }, {})
 
   const history = Object.values(grouped).map(v => ({
-    date: v.date.toISOString().split('T')[0],
+    date: saoPauloDateStr(v.date),
     weight: v.maxWeight,
     isPR: v.isPR,
   }))
