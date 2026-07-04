@@ -415,9 +415,9 @@ export default function LandingPage() {
             © {new Date().getFullYear()} FitSync. Todos os direitos reservados.
           </p>
           <div className="flex gap-4">
-            {['Privacidade', 'Termos', 'Contato'].map(link => (
-              <a key={link} href="#" className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{link}</a>
-            ))}
+            <Link href="/privacidade" className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Privacidade</Link>
+            <Link href="/termos" className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Termos</Link>
+            <a href="mailto:contato@fitsync.app.br" className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Contato</a>
           </div>
         </div>
       </footer>

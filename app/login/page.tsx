@@ -274,9 +274,9 @@ export default function LoginPage() {
 
         <p className="text-center text-xs mt-6" style={{ color: 'var(--color-text-muted)' }}>
           Ao continuar, você concorda com nossos{' '}
-          <a href="#" style={{ color: 'var(--color-primary)' }}>Termos de Uso</a>
+          <a href="/termos" target="_blank" rel="noreferrer" style={{ color: 'var(--color-primary)' }}>Termos de Uso</a>
           {' '}e{' '}
-          <a href="#" style={{ color: 'var(--color-primary)' }}>Política de Privacidade</a>
+          <a href="/privacidade" target="_blank" rel="noreferrer" style={{ color: 'var(--color-primary)' }}>Política de Privacidade</a>
         </p>
       </div>
     </div>
