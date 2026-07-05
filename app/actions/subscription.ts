@@ -5,36 +5,11 @@ import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { saoPauloDateStr } from '@/lib/coach/shared'
 import { reportError } from '@/lib/monitoring'
-import { getPlan, DEFAULT_BILLING_TYPE, ACTIVE_STATUSES } from '@/lib/asaas/config'
 import {
-  createAsaasCustomer,
-  createAsaasSubscription,
-  getSubscriptionPayments,
-  cancelAsaasSubscription,
-} from '@/lib/asaas/client'
-
-// ─── Validação de CPF/CNPJ ──────────────────────────────────────────────
-
-function onlyDigits(s: string): string {
-  return (s ?? '').replace(/\D/g, '')
-}
-
-function isValidCpf(cpf: string): boolean {
-  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false
-  const calc = (len: number) => {
-    let sum = 0
-    for (let i = 0; i < len; i++) sum += parseInt(cpf[i], 10) * (len + 1 - i)
-    const r = (sum * 10) % 11
-    return r === 10 ? 0 : r
-  }
-  return calc(9) === parseInt(cpf[9], 10) && calc(10) === parseInt(cpf[10], 10)
-}
-
-function isValidCpfCnpj(digits: string): boolean {
-  if (digits.length === 11) return isValidCpf(digits)
-  if (digits.length === 14) return true // CNPJ: valida formato; Asaas confere o dígito
-  return false
-}
+  getPlan, ACTIVE_STATUSES,
+  CHECKOUT_BILLING_TYPES, CHECKOUT_EXPIRES_MIN, appPublicUrl,
+} from '@/lib/asaas/config'
+import { createAsaasCheckout, cancelAsaasSubscription } from '@/lib/asaas/client'
 
 /** Data de vencimento inicial (hoje + dias de trial) em yyyy-MM-dd, ancorada ao meio-dia. */
 function nextDueDateISO(trialDays: number): string {
@@ -43,11 +18,10 @@ function nextDueDateISO(trialDays: number): string {
   return base.toISOString().slice(0, 10)
 }
 
-// ─── Iniciar/atualizar assinatura ──────────────────────────────────────
+// ─── Iniciar checkout (cartão + trial) ──────────────────────────────────
 
-export async function startSubscription(params: {
+export async function startCheckout(params: {
   planId: string
-  cpfCnpj: string
 }): Promise<{ checkoutUrl?: string; alreadyActive?: boolean; error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -65,89 +39,63 @@ export async function startSubscription(params: {
   // Já tem assinatura liberando acesso? Não cria outra.
   const existing = dbUser.subscription
   if (existing && ACTIVE_STATUSES.includes(existing.status as never)) {
-    return { alreadyActive: true, checkoutUrl: existing.checkoutUrl ?? undefined }
-  }
-
-  const cpfCnpj = onlyDigits(params.cpfCnpj)
-  if (!isValidCpfCnpj(cpfCnpj)) {
-    return { error: 'CPF/CNPJ inválido. Confira os números.' }
+    return { alreadyActive: true }
   }
 
   try {
-    // 1. Cliente no Asaas (reaproveita se já existir)
-    let asaasCustomerId = existing?.asaasCustomerId ?? null
-    if (!asaasCustomerId) {
-      const customer = await createAsaasCustomer({
-        name: dbUser.name ?? dbUser.email,
-        cpfCnpj,
-        email: dbUser.email,
-        mobilePhone: dbUser.phone ?? undefined,
-        externalReference: dbUser.id,
-      })
-      asaasCustomerId = customer.id
-    }
-
-    // 2. Assinatura (cobrança recorrente) com trial
     const nextDueDate = nextDueDateISO(plan.trialDays)
-    const subscription = await createAsaasSubscription({
-      customer: asaasCustomerId,
-      billingType: DEFAULT_BILLING_TYPE,
-      value: plan.value,
-      nextDueDate,
-      cycle: plan.cycle,
-      description: plan.description,
+    const base = appPublicUrl()
+
+    // Checkout hospedado: cartão digitado na página do Asaas (PCI-safe),
+    // assinatura recorrente com 1ª cobrança em nextDueDate (trial).
+    // externalReference = userId amarra o webhook de volta ao usuário.
+    const checkout = await createAsaasCheckout({
+      billingTypes: CHECKOUT_BILLING_TYPES,
+      chargeTypes: ['RECURRENT'],
+      minutesToExpire: CHECKOUT_EXPIRES_MIN,
       externalReference: dbUser.id,
+      callback: {
+        successUrl: `${base}/app/assinatura?status=ok`,
+        cancelUrl: `${base}/app/assinatura?status=cancel`,
+      },
+      items: [{ name: `FitSync Premium — ${plan.name}`, quantity: 1, value: plan.value }],
+      subscription: { cycle: plan.cycle, nextDueDate },
     })
 
-    // 3. Checkout hospedado = invoiceUrl da 1ª cobrança gerada
-    let checkoutUrl: string | undefined
-    try {
-      const payments = await getSubscriptionPayments(subscription.id)
-      checkoutUrl = payments.data[0]?.invoiceUrl
-    } catch {
-      // sem pagamento ainda — segue sem checkoutUrl, será preenchido via webhook
-    }
-
-    // 4. Persiste (upsert — um registro por usuário)
-    const status = plan.trialDays > 0 ? 'TRIALING' : 'PENDING'
+    // Persiste o checkout pendente (o webhook completa quando o cartão passar)
     const trialEndsAt = plan.trialDays > 0 ? new Date(nextDueDate + 'T12:00:00') : null
-
     await prisma.subscription.upsert({
       where: { userId: dbUser.id },
       create: {
         userId: dbUser.id,
         plan: plan.id,
-        status,
-        billingType: DEFAULT_BILLING_TYPE,
+        status: 'PENDING',
+        billingType: 'CREDIT_CARD',
         value: plan.value,
         cycle: plan.cycle,
-        cpfCnpj,
-        asaasCustomerId,
-        asaasSubscriptionId: subscription.id,
-        checkoutUrl,
+        asaasCheckoutId: checkout.id,
+        checkoutUrl: checkout.link,
         currentDueDate: new Date(nextDueDate + 'T12:00:00'),
         trialEndsAt,
       },
       update: {
         plan: plan.id,
-        status,
-        billingType: DEFAULT_BILLING_TYPE,
+        status: 'PENDING',
+        billingType: 'CREDIT_CARD',
         value: plan.value,
         cycle: plan.cycle,
-        cpfCnpj,
-        asaasCustomerId,
-        asaasSubscriptionId: subscription.id,
-        checkoutUrl,
+        asaasCheckoutId: checkout.id,
+        checkoutUrl: checkout.link,
         currentDueDate: new Date(nextDueDate + 'T12:00:00'),
         trialEndsAt,
       },
     })
 
     revalidatePath('/app/assinatura')
-    return { checkoutUrl }
+    return { checkoutUrl: checkout.link }
   } catch (e) {
-    reportError('asaas:startSubscription', e, { userId: dbUser.id, plan: plan.id })
-    return { error: e instanceof Error ? e.message : 'Erro ao iniciar assinatura' }
+    reportError('asaas:startCheckout', e, { userId: dbUser.id, plan: plan.id })
+    return { error: e instanceof Error ? e.message : 'Erro ao iniciar o checkout' }
   }
 }
 

@@ -121,3 +121,28 @@ export function cancelAsaasSubscription(id: string): Promise<{ deleted: boolean;
     method: 'DELETE',
   })
 }
+
+// ─── Checkout hospedado (cartão + assinatura + trial) ───────────────────
+
+export interface CreateCheckoutInput {
+  billingTypes: readonly string[]        // ['CREDIT_CARD']
+  chargeTypes: readonly string[]         // ['RECURRENT']
+  minutesToExpire: number
+  externalReference: string              // = userId (amarra o webhook de volta)
+  callback: { successUrl: string; cancelUrl: string; expiredUrl?: string }
+  items: Array<{ name: string; quantity: number; value: number; description?: string }>
+  subscription: { cycle: string; nextDueDate: string; endDate?: string }
+}
+
+export interface AsaasCheckout {
+  id: string
+  link: string
+  status: string
+}
+
+export function createAsaasCheckout(input: CreateCheckoutInput): Promise<AsaasCheckout> {
+  return asaasFetch<AsaasCheckout>('/checkouts', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}

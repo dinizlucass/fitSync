@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { startSubscription, cancelMySubscription, type MySubscription } from '@/app/actions/subscription'
+import { startCheckout, cancelMySubscription, getMySubscription, type MySubscription } from '@/app/actions/subscription'
 
 interface PlanView {
   id: string
@@ -17,6 +17,8 @@ const BRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', curren
 const cycleLabel = (c: string) => (c === 'YEARLY' ? '/ano' : '/mês')
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' }) : '—'
+const fmtInDays = (days: number) =>
+  new Date(Date.now() + days * 86400_000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })
 
 const STATUS_LABEL: Record<string, { text: string; color: string }> = {
   TRIALING: { text: 'Período de teste', color: 'var(--color-primary)' },
@@ -38,20 +40,50 @@ export default function AssinaturaClient({
 }) {
   const router = useRouter()
   const [selected, setSelected] = useState<string>(plans[0]?.id ?? 'monthly')
-  const [cpf, setCpf] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [processing, setProcessing] = useState(false) // aguardando confirmação do checkout
   const [isPending, startTransition] = useTransition()
 
   const isActive = current && (current.status === 'ACTIVE' || current.status === 'TRIALING')
 
+  // Retorno do checkout do Asaas (?status=ok|cancel)
+  useEffect(() => {
+    if (typeof window === 'undefined' || isActive) return
+    const params = new URLSearchParams(window.location.search)
+    const status = params.get('status')
+    if (!status) return
+    window.history.replaceState({}, '', '/app/assinatura')
+
+    if (status === 'cancel') {
+      setError('Pagamento não concluído. Você pode tentar de novo quando quiser.')
+      return
+    }
+    if (status === 'ok') {
+      // O webhook confirma de forma assíncrona — faz poll até virar TRIALING/ACTIVE
+      setProcessing(true)
+      let tries = 0
+      const timer = setInterval(async () => {
+        tries++
+        const sub = await getMySubscription()
+        if (sub && (sub.status === 'TRIALING' || sub.status === 'ACTIVE')) {
+          clearInterval(timer)
+          router.refresh()
+        } else if (tries >= 8) {
+          clearInterval(timer)
+          setProcessing(false)
+        }
+      }, 2000)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function handleSubscribe() {
     setError(null)
     startTransition(async () => {
-      const res = await startSubscription({ planId: selected, cpfCnpj: cpf })
+      const res = await startCheckout({ planId: selected })
       if (res.error) { setError(res.error); return }
       if (res.checkoutUrl) { window.location.href = res.checkoutUrl; return }
       if (res.alreadyActive) { router.refresh(); return }
-      // sem checkoutUrl mas criado — atualiza a tela
       router.refresh()
     })
   }
@@ -64,6 +96,17 @@ export default function AssinaturaClient({
       if (res.error) setError(res.error)
       router.refresh()
     })
+  }
+
+  // ── Processando retorno do checkout ──────────────────────────────────
+  if (processing) {
+    return (
+      <div className="rounded-xl p-6 border text-center" style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)', borderRadius: 'var(--radius-card)' }}>
+        <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
+        <p className="text-sm font-medium mb-1">Confirmando seu pagamento...</p>
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Isso leva alguns segundos. Não feche a página.</p>
+      </div>
+    )
   }
 
   // ── Estado: assinatura ativa / em teste ──────────────────────────────
@@ -80,18 +123,13 @@ export default function AssinaturaClient({
         </p>
         {current!.status === 'TRIALING' && (
           <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
-            1ª cobrança em {fmtDate(current!.trialEndsAt ?? current!.currentDueDate)}.
+            Teste grátis ativo. 1ª cobrança em {fmtDate(current!.trialEndsAt ?? current!.currentDueDate)}.
           </p>
         )}
         {current!.status === 'ACTIVE' && current!.currentDueDate && (
           <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
             Próxima cobrança em {fmtDate(current!.currentDueDate)}.
           </p>
-        )}
-        {current!.checkoutUrl && (
-          <a href={current!.checkoutUrl} target="_blank" rel="noreferrer" className="inline-block text-xs font-medium mb-3" style={{ color: 'var(--color-primary)' }}>
-            Ver fatura →
-          </a>
         )}
         <div>
           <button
@@ -109,22 +147,23 @@ export default function AssinaturaClient({
   }
 
   // ── Estado: sem assinatura ativa (novo / pendente / cancelada) ──────
-  const pendingCheckout = current && (current.status === 'PENDING' || current.status === 'PAST_DUE') ? current.checkoutUrl : null
+  const resumeCheckout = current && current.status === 'PENDING' ? current.checkoutUrl : null
+  const selectedPlan = plans.find(p => p.id === selected) ?? plans[0]
 
   return (
     <div>
       {gated && (
         <div className="rounded-xl p-4 mb-4 border" style={{ backgroundColor: 'var(--color-primary-light)', borderColor: 'var(--color-border)', borderRadius: 'var(--radius-card)' }}>
-          <p className="text-sm font-medium" style={{ color: 'var(--color-primary)' }}>Assine para continuar usando o FitSync</p>
-          <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Escolha um plano abaixo. Você tem {plans[0]?.trialDays ?? 7} dias grátis.</p>
+          <p className="text-sm font-medium" style={{ color: 'var(--color-primary)' }}>Comece seus {plans[0]?.trialDays ?? 7} dias grátis</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Escolha um plano para liberar o FitSync completo. Você só é cobrado depois do teste.</p>
         </div>
       )}
 
-      {pendingCheckout && (
+      {resumeCheckout && (
         <div className="rounded-xl p-4 mb-4 border" style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-fat, #EF9F27)', borderRadius: 'var(--radius-card)' }}>
-          <p className="text-sm font-medium mb-1">Você tem uma cobrança em aberto</p>
-          <a href={pendingCheckout} target="_blank" rel="noreferrer" className="text-sm font-medium" style={{ color: 'var(--color-primary)' }}>
-            Finalizar pagamento →
+          <p className="text-sm font-medium mb-1">Você começou um checkout</p>
+          <a href={resumeCheckout} className="text-sm font-medium" style={{ color: 'var(--color-primary)' }}>
+            Continuar o pagamento →
           </a>
         </div>
       )}
@@ -165,31 +204,20 @@ export default function AssinaturaClient({
         })}
       </div>
 
-      {/* CPF */}
-      <label className="block text-xs mb-1.5" style={{ color: 'var(--color-text-muted)' }}>CPF ou CNPJ do titular</label>
-      <input
-        type="text"
-        inputMode="numeric"
-        value={cpf}
-        onChange={(e) => setCpf(e.target.value)}
-        placeholder="000.000.000-00"
-        className="w-full text-sm px-3 py-2.5 rounded-lg border outline-none mb-3"
-        style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)' }}
-      />
-
       <button
         onClick={handleSubscribe}
-        disabled={isPending || !cpf}
+        disabled={isPending}
         className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-50"
         style={{ backgroundColor: 'var(--color-primary)' }}
       >
-        {isPending ? 'Processando...' : 'Assinar e ir para o pagamento'}
+        {isPending ? 'Abrindo pagamento...' : `Começar ${selectedPlan?.trialDays ?? 7} dias grátis`}
       </button>
 
       {error && <p className="text-xs mt-2" style={{ color: 'var(--color-alert, #E24B4A)' }}>{error}</p>}
 
-      <p className="text-xs mt-3 text-center" style={{ color: 'var(--color-text-muted)' }}>
-        Pagamento seguro via Asaas · PIX, boleto ou cartão · cancele quando quiser
+      <p className="text-xs mt-3 text-center leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+        Você informa o cartão na página segura do Asaas.<br />
+        Nada é cobrado agora — a 1ª cobrança é só em <strong>{fmtInDays(selectedPlan?.trialDays ?? 7)}</strong>. Cancele quando quiser.
       </p>
     </div>
   )

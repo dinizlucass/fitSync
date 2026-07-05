@@ -66,6 +66,7 @@ model Subscription {
   cpfCnpj             String?
   asaasCustomerId     String?
   asaasSubscriptionId String?   @unique
+  asaasCheckoutId     String?   @unique
   checkoutUrl         String?
   currentDueDate      DateTime?
   trialEndsAt         DateTime?
