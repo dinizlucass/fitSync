@@ -1,6 +1,13 @@
 import OpenAI from 'openai'
 import type { SmartDietPlan, MealVariant } from '@/lib/diet-types'
-import type { SmartWorkoutPlan, ExerciseAlternative } from '@/lib/workout-types'
+import type {
+  ExerciseAlternative,
+  WeekSkeleton,
+  ProgramDaySkeleton,
+  ProgramDayPlan,
+  CardioRecommendation,
+  WorkoutExerciseSlot,
+} from '@/lib/workout-types'
 
 let _openai: OpenAI | undefined
 
@@ -257,102 +264,163 @@ export interface GeneratedWorkoutPlan {
   tips: string[]
 }
 
-export async function generateWorkoutPlan(params: {
-  method: string
+// Contexto comum do aluno, injetado nas duas etapas da geração
+export interface ProgramContext {
   methodName: string
   daysPerWeek: number
   goal: string
   level: string
-  splits: string[]
+  sex?: string | null            // 'male' | 'female'
+  emphasis: string               // descrição legível da ênfase escolhida
+  equipment: string              // descrição legível do equipamento disponível
+  limitations?: string           // lesões, restrições e preferências em texto livre
   sessionDuration: number
-  includeCardio: boolean
-  cardioGoal?: string
-  dailyCalorieGoal?: number
   volumeLabel: string
   setsRange: string
-}): Promise<SmartWorkoutPlan> {
-  const volumeGuide =
-    params.sessionDuration <= 30 ? `3-4 exercícios, ${params.setsRange} séries, sem supersets`
-    : params.sessionDuration <= 45 ? `4-5 exercícios, ${params.setsRange} séries`
-    : params.sessionDuration <= 60 ? `5-6 exercícios, ${params.setsRange} séries, pode incluir superset`
-    : `7-8 exercícios, ${params.setsRange} séries, alto volume, supersets opcionais`
+  includeCardio: boolean
+  dailyCalorieGoal?: number
+}
 
-  const cardioInstruction = params.includeCardio
-    ? `Inclua 1-2 recomendações de cardio no campo 'cardio'.
-Meta calórica diária do usuário: ${params.dailyCalorieGoal ?? 'não informada'} kcal.
-Objetivo: ${params.cardioGoal ?? params.goal}.
-Para 'Perda de gordura': priorize HIIT 2-3x/semana + LISS opcional.
-Para 'Ganho de massa': cardio leve 1-2x/semana para saúde cardiovascular.
-Para 'Manutenção' ou 'Recomposição': LISS moderado 2-3x/semana.
-Em 'caloriesBurn' estime as kcal gastas por sessão de forma realista.`
-    : `O usuário NÃO quer cardio. Retorne "cardio": [] (array vazio).`
+function alunoBrief(p: ProgramContext): string {
+  return `PERFIL DO ALUNO:
+- Sexo: ${p.sex === 'female' ? 'feminino' : p.sex === 'male' ? 'masculino' : 'não informado'}
+- Objetivo: ${p.goal}
+- Nível: ${p.level}
+- Ênfase muscular escolhida: ${p.emphasis}
+- Equipamento disponível: ${p.equipment}
+- Limitações/preferências: ${p.limitations?.trim() || 'nenhuma informada'}
+- Sessões de ${p.sessionDuration} min, volume ${p.volumeLabel} (${p.setsRange} séries por exercício)`
+}
+
+/**
+ * Etapa 1 — Esqueleto da semana: monta a DIVISÃO real em função da ênfase.
+ * É aqui que "ABC com 2x perna" vira A: Quadríceps+Glúteos / B: Superior / C: Posterior+Glúteos.
+ */
+export async function generateWeekSkeleton(p: ProgramContext): Promise<WeekSkeleton> {
+  const cardioInstruction = p.includeCardio
+    ? `Inclua 1-2 recomendações de cardio no campo "cardio" (meta calórica diária: ${p.dailyCalorieGoal ?? 'não informada'} kcal; objetivo: ${p.goal}). Perda de gordura → HIIT 2-3x/sem + LISS opcional; Ganho de massa → cardio leve 1-2x/sem; Recomposição/Manutenção → LISS moderado 2-3x/sem. Estime "caloriesBurn" realista por sessão.`
+    : `Retorne "cardio": [] (o aluno não quer cardio).`
 
   const response = await getOpenAI().chat.completions.create({
     model: 'gpt-4o',
     messages: [
       {
         role: 'system',
-        content: `Você é um personal trainer experiente especializado em montagem de treinos.
-Monte um plano de treino completo em português brasileiro.
-Responda SOMENTE com JSON válido no formato especificado, sem markdown, sem explicações fora do JSON.
-Inclua 1-2 exercícios alternativos por exercício principal.
-Seja específico: exercícios reais adaptados ao nível do aluno.
-Para iniciantes: exercícios básicos, séries 3x, reps 10-15.
-Para intermediários: variações compostas, séries 4x, reps 8-12.
-Para avançados: técnicas avançadas, séries 4-5x, reps 6-12 com variação.
+        content: `Você é um treinador experiente que monta divisões de treino semanais personalizadas (português brasileiro).
+Sua tarefa é APENAS definir a estrutura da semana: quantos dias, o foco muscular de cada dia e o racional — os exercícios virão depois.
+Responda SOMENTE com JSON válido.
 
-CAMPO "methodology" — 3 a 4 dicas 100% sobre COMO executar o treino (falha, RIR, tempo de descanso, cadência, técnicas avançadas). NUNCA dicas genéricas como "beba água" ou "durma bem". Siga estas regras conforme a combinação volume + objetivo:
-- Volume "Baixo" (qualquer objetivo): OBRIGATÓRIO incluir "Leve as últimas 2 séries de cada exercício à falha concêntrica ou 1 RIR para compensar o volume reduzido" e uma dica de tempo de descanso entre séries.
-- Volume "Alto" + Ganho de massa muscular: incluir "Nas primeiras séries conserve 2-3 RIR. Apenas a última série de cada exercício deve ser levada ao limite (0-1 RIR)".
-- Volume "Alto" + Perda de gordura: incluir "Reduza o descanso para 45-60s e considere supersets nos exercícios isoladores para maximizar o gasto calórico".
-- Volume "Moderado" (qualquer objetivo): equilíbrio entre as abordagens acima (parte das séries com 2-3 RIR, últimas próximas da falha, descanso moderado).`,
+REGRAS DE DIVISÃO:
+- A ênfase do aluno MANDA na divisão. "Ênfase em pernas/glúteos" num ABC = 2 dias de inferior (ex.: A quadríceps+glúteos, C posterior+glúteos) e 1 dia de superior completo. Ênfase em um grupo = esse grupo aparece 2x na semana e/ou abre o treino.
+- Respeite o formato do método (${p.methodName}), mas ADAPTE os focos à ênfase — as divisões clássicas são ponto de partida, não camisa de força.
+- Distribua o volume semanal com recuperação adequada: não coloque o mesmo grupo em dias consecutivos.
+- Grupos prioritários devem receber ~2x mais volume semanal que os demais.
+- Se o sexo for feminino e a ênfase não contradisser, tende a mais volume de inferiores/glúteos; se masculino, equilíbrio clássico — mas a ênfase ESCOLHIDA sempre vence.
+- Considere as limitações: se há lesão num segmento, reduza a exposição dele na semana.`,
       },
       {
         role: 'user',
-        content: `Monte um plano de treino com as seguintes especificações:
-- Método: ${params.methodName}
-- Dias por semana: ${params.daysPerWeek}
-- Objetivo: ${params.goal}
-- Nível: ${params.level}
-- Divisões: ${params.splits.join(', ')}
-- Duração da sessão: ${params.sessionDuration} min. ${volumeGuide}.
-- Volume preferido: ${params.volumeLabel} (${params.setsRange} séries por exercício). TODOS os exercícios devem usar ${params.setsRange} séries. Ajuste o número de exercícios para caber em ${params.sessionDuration} min considerando ${params.setsRange} séries e os tempos de descanso.
+        content: `${alunoBrief(p)}
 
+Método: ${p.methodName} — EXATAMENTE ${p.daysPerWeek} dias de treino.
 ${cardioInstruction}
 
-Retorne um JSON EXATO (apenas um treino/dia, não um array de dias):
+Retorne JSON EXATO:
 {
-  "name": "${params.methodName} - ${params.splits[0] ?? 'Treino'}",
-  "duration": "${params.sessionDuration} min",
+  "programName": "nome curto do programa (ex: ABC — Ênfase em Glúteos)",
+  "weeklyRationale": "1-2 frases explicando a lógica da semana para o aluno",
+  "days": [
+    { "label": "Treino A", "focus": "Quadríceps e Glúteos", "muscleGroups": ["Quadríceps", "Glúteos", "Panturrilhas"] }
+  ],
+  "cardio": []
+}
+
+O array "days" deve ter EXATAMENTE ${p.daysPerWeek} itens, com labels "Treino A", "Treino B", ... em sequência.`,
+      },
+    ],
+    response_format: { type: 'json_object' },
+    temperature: 0.5,
+  })
+
+  const content = response.choices[0].message.content
+  if (!content) throw new Error('No response from OpenAI')
+  const skeleton = JSON.parse(content) as WeekSkeleton
+  if (!Array.isArray(skeleton.days) || skeleton.days.length !== p.daysPerWeek) {
+    throw new Error(`Esqueleto inválido: esperava ${p.daysPerWeek} dias, veio ${skeleton.days?.length ?? 0}`)
+  }
+  return skeleton
+}
+
+/**
+ * Etapa 2 — Um dia por chamada (roda em paralelo). JSON pequeno = qualidade
+ * alta e nenhum dia faltando. Recebe o esqueleto inteiro como contexto para
+ * não repetir exercícios entre dias.
+ */
+export async function generateProgramDay(
+  p: ProgramContext,
+  skeleton: WeekSkeleton,
+  day: ProgramDaySkeleton,
+): Promise<ProgramDayPlan> {
+  const exerciseCount =
+    p.sessionDuration <= 30 ? '3-4 exercícios'
+    : p.sessionDuration <= 45 ? '4-5 exercícios'
+    : p.sessionDuration <= 60 ? '5-6 exercícios'
+    : '6-8 exercícios'
+
+  const weekOverview = skeleton.days
+    .map(d => `${d.label}: ${d.focus}${d.label === day.label ? '  ← VOCÊ ESTÁ MONTANDO ESTE' : ''}`)
+    .join('\n')
+
+  const response = await getOpenAI().chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      {
+        role: 'system',
+        content: `Você é um personal trainer experiente montando UM dia de um programa semanal (português brasileiro).
+Responda SOMENTE com JSON válido.
+
+REGRAS DE MONTAGEM:
+- Ordem: compostos/multiarticulares primeiro, isoladores depois. O primeiro exercício deve ser o mais importante para o foco do dia.
+- Faixas de repetição pelo objetivo: hipertrofia 6-12 (compostos podem 6-8, isoladores 10-15); perda de gordura 8-15 com descansos menores; iniciantes sempre 10-15 com técnica.
+- Descanso: 90-120s em compostos pesados, 60-90s intermediários, 45-60s isoladores.
+- TODOS os exercícios com ${p.setsRange} séries (volume ${p.volumeLabel}).
+- TODOS os exercícios (principal E alternativas) devem ser executáveis com: ${p.equipment}. Se o equipamento é limitado, use as melhores variações possíveis (halteres, elásticos, peso corporal) — nunca prescreva máquina para quem treina em casa.
+- Alternativas: 1-2 por exercício, mesmo padrão de movimento, incluindo quando possível uma opção com menos equipamento.
+- LIMITAÇÕES SÃO SAGRADAS: se o aluno relatou dor/lesão (ex.: joelho, ombro, lombar), evite exercícios de alto estresse nessa articulação e anote a adaptação em "notes". Se citou exercícios que ama, inclua; que odeia, exclua.
+- Sexo ${p.sex === 'female' ? 'feminino: quando o foco do dia incluir inferiores, priorize padrões dominantes de quadril (hip thrust, RDL, búlgaro, abdução) junto aos de joelho' : 'masculino: priorize os básicos compostos com progressão de carga'} — sempre a serviço do foco do dia.
+- Não repita exercícios que claramente pertencem a outros dias da semana (veja a visão geral).
+- "notes" do exercício = dica de execução curta e útil (pegada, amplitude, cadência), não frase genérica.
+
+CAMPO "methodology" — 3-4 dicas 100% sobre COMO executar ESTE treino (RIR, falha, descanso, cadência, técnicas):
+- Volume "Baixo": OBRIGATÓRIO incluir levar as 2 últimas séries à falha/1 RIR + dica de descanso.
+- Volume "Alto" + massa: primeiras séries 2-3 RIR, só a última série de cada exercício em 0-1 RIR.
+- Volume "Alto" + perda de gordura: descanso 45-60s + supersets nos isoladores.
+- Volume "Moderado": meio-termo das regras acima.`,
+      },
+      {
+        role: 'user',
+        content: `${alunoBrief(p)}
+
+SEMANA COMPLETA (para contexto — não repita exercícios entre dias):
+${weekOverview}
+
+MONTE APENAS: ${day.label} — ${day.focus}
+Grupos deste dia: ${day.muscleGroups.join(', ')}
+Quantidade: ${exerciseCount} (para caber em ${p.sessionDuration} min com ${p.setsRange} séries e descansos).
+
+Retorne JSON EXATO:
+{
   "exercises": [
     {
-      "muscleGroup": "Peitoral",
-      "primary": { "name": "Supino reto com barra", "sets": 4, "reps": "8-10", "rest": "90s", "equipment": "Barra", "notes": "dica de execução" },
+      "muscleGroup": "Glúteos",
+      "primary": { "name": "Hip thrust com barra", "sets": 4, "reps": "8-12", "rest": "90s", "equipment": "Barra e banco", "notes": "pausa de 1s no topo, queixo recolhido" },
       "alternatives": [
-        { "name": "Supino com halteres", "sets": 4, "reps": "8-10", "rest": "90s", "equipment": "Halteres" },
-        { "name": "Flexão com pés elevados", "sets": 4, "reps": "12-15", "rest": "60s", "equipment": "Peso corporal" }
+        { "name": "Elevação pélvica com halter", "sets": 4, "reps": "10-15", "rest": "75s", "equipment": "Halter" }
       ]
     }
   ],
-  "tips": ["dica 1", "dica 2", "dica 3"],
-  "methodology": [
-    "Nas 2 últimas séries de cada exercício, chegue a 0-1 RIR",
-    "Descanso: 90s em compostos, 60s em isoladores",
-    "Progrida 2.5kg quando completar todas as reps com boa técnica"
-  ],
-  "cardio": [
-    {
-      "type": "HIIT",
-      "description": "30s sprint / 30s descanso, 8 rounds na esteira",
-      "durationMin": 20,
-      "frequency": "2x por semana",
-      "caloriesBurn": 220,
-      "bestFor": "Queima de gordura preservando massa muscular"
-    }
-  ]
-}
-
-Monte para o primeiro dia da divisão (${params.splits[0] ?? 'Treino A'}). Todos os exercícios com ${params.setsRange} séries e 1-2 alternativas cada. Preencha "methodology" seguindo as regras do volume ${params.volumeLabel}.`,
+  "methodology": ["dica 1", "dica 2", "dica 3"]
+}`,
       },
     ],
     response_format: { type: 'json_object' },
@@ -361,7 +429,11 @@ Monte para o primeiro dia da divisão (${params.splits[0] ?? 'Treino A'}). Todos
 
   const content = response.choices[0].message.content
   if (!content) throw new Error('No response from OpenAI')
-  return JSON.parse(content) as SmartWorkoutPlan
+  const parsed = JSON.parse(content) as { exercises: WorkoutExerciseSlot[]; methodology: string[]; cardio?: CardioRecommendation[] }
+  if (!Array.isArray(parsed.exercises) || parsed.exercises.length < 3) {
+    throw new Error(`Dia ${day.label} veio com poucos exercícios (${parsed.exercises?.length ?? 0})`)
+  }
+  return { ...day, exercises: parsed.exercises, methodology: parsed.methodology ?? [] }
 }
 
 export async function refineExercise(params: {

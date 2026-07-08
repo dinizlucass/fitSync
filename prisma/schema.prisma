@@ -117,6 +117,7 @@ model Workout {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
   muscleGroups String[]
+  archived     Boolean  @default(false) // programas antigos saem da lista sem perder histórico
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

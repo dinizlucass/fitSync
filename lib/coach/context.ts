@@ -42,6 +42,31 @@ export interface UserContext {
   }
 }
 
+/**
+ * Rotação do programa: sugere o treino MENOS recentemente feito (nunca
+ * treinados primeiro, na ordem A, B, C...). Ignora arquivados e treinos
+ * sem exercícios ("Treino avulso" criado por registros livres do WhatsApp).
+ */
+export async function pickNextWorkout(userId: string) {
+  const workouts = await prisma.workout.findMany({
+    where: { userId, archived: false, exercises: { some: {} } },
+    include: {
+      exercises: { include: { exercise: true }, orderBy: { order: 'asc' } },
+      sessions: { orderBy: { date: 'desc' }, take: 1 },
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+  if (workouts.length === 0) return null
+
+  const sorted = [...workouts].sort((a, b) => {
+    const aT = a.sessions[0]?.date.getTime() ?? 0
+    const bT = b.sessions[0]?.date.getTime() ?? 0
+    if (aT !== bT) return aT - bT
+    return a.createdAt.getTime() - b.createdAt.getTime()
+  })
+  return sorted[0]
+}
+
 const MEALTYPE_PT: Record<string, string> = {
   BREAKFAST: 'Café da manhã',
   LUNCH: 'Almoço',
@@ -103,15 +128,8 @@ export async function buildUserContext(userId: string): Promise<UserContext> {
     gordura_g: metaFat != null ? round(metaFat - consumido.gordura_g) : 0,
   }
 
-  // ── Treino do dia (plano ativo = mais recente COM exercícios) ──────
-  // exclui "Treino avulso" (0 exercícios, criado por registros livres do WhatsApp)
-  const latestWorkout = await prisma.workout.findFirst({
-    where: { userId, exercises: { some: {} } },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      exercises: { include: { exercise: true }, orderBy: { order: 'asc' } },
-    },
-  })
+  // ── Treino do dia (rotação: o menos recentemente feito do programa) ─
+  const latestWorkout = await pickNextWorkout(userId)
 
   let treino_do_dia: UserContext['hoje']['treino_do_dia'] = null
   if (latestWorkout) {

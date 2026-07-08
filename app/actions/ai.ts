@@ -4,16 +4,19 @@ import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import {
-  generateWorkoutPlan,
+  generateWeekSkeleton,
+  generateProgramDay,
   generateSmartDietPlan,
   refineMealVariant,
   refineExercise,
   type ChatMessage,
+  type ProgramContext,
 } from '@/lib/openai'
 import { runCoach } from '@/lib/coach/coach'
+import { reportError } from '@/lib/monitoring'
 import { WORKOUT_METHODS } from '@/lib/workout-methods'
 import type { SmartDietPlan, MealVariant } from '@/lib/diet-types'
-import type { SmartWorkoutPlan, ExerciseAlternative, VolumePreference } from '@/lib/workout-types'
+import type { SmartProgramPlan, ExerciseAlternative, VolumePreference } from '@/lib/workout-types'
 
 // ─── Generate & Save Workout Plan ─────────────────────────────────────────
 
@@ -30,7 +33,7 @@ const VOLUME_MAP: Record<VolumePreference, { sets: string; setsNum: number; labe
   high:     { sets: '4-5', setsNum: 4, label: 'Alto' },
 }
 
-export async function generateAndSaveWorkoutPlan(params: {
+export interface GenerateProgramParams {
   methodId: string
   daysPerWeek: number
   goal: string
@@ -38,7 +41,29 @@ export async function generateAndSaveWorkoutPlan(params: {
   sessionDuration: number
   includeCardio: boolean
   volumePreference: VolumePreference
-}): Promise<{ success?: boolean; plan?: SmartWorkoutPlan; error?: string }> {
+  emphasis: string           // descrição legível da ênfase (presets ou custom)
+  equipment: string          // descrição legível do equipamento
+  limitations?: string       // lesões/restrições/preferências em texto livre
+}
+
+/** Tenta fn até 2x — geração por IA pode falhar validação na primeira. */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch {
+    return await fn()
+  }
+}
+
+/**
+ * Gera o PROGRAMA COMPLETO (todos os dias da divisão):
+ * 1 chamada monta o esqueleto da semana conforme a ênfase, depois 1 chamada
+ * POR DIA em paralelo. Não salva nada — o salvamento é decisão do usuário
+ * na tela de resultado (saveProgramAction).
+ */
+export async function generateProgramAction(
+  params: GenerateProgramParams
+): Promise<{ plan?: SmartProgramPlan; error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
@@ -52,66 +77,42 @@ export async function generateAndSaveWorkoutPlan(params: {
   const method = WORKOUT_METHODS.find(m => m.id === params.methodId)
   if (!method) return { error: 'Método inválido' }
 
-  const splits = method.splits[params.daysPerWeek as keyof typeof method.splits] ?? []
+  const ctx: ProgramContext = {
+    methodName: method.name,
+    daysPerWeek: params.daysPerWeek,
+    goal: params.goal,
+    level: params.level,
+    sex: dbUser.profile?.sex ?? null,
+    emphasis: params.emphasis,
+    equipment: params.equipment,
+    limitations: params.limitations,
+    sessionDuration: params.sessionDuration,
+    volumeLabel: VOLUME_MAP[params.volumePreference].label,
+    setsRange: VOLUME_MAP[params.volumePreference].sets,
+    includeCardio: params.includeCardio,
+    dailyCalorieGoal: dbUser.profile?.calorieGoal ?? undefined,
+  }
 
   try {
-    const plan = await generateWorkoutPlan({
-      method: params.methodId,
-      methodName: method.name,
-      daysPerWeek: params.daysPerWeek,
-      goal: params.goal,
-      level: params.level,
-      splits,
-      sessionDuration: params.sessionDuration,
-      includeCardio: params.includeCardio,
-      cardioGoal: GOAL_LABELS_PT[dbUser.profile?.goalType ?? 'MAINTAIN'],
-      dailyCalorieGoal: dbUser.profile?.calorieGoal ?? undefined,
-      volumeLabel: VOLUME_MAP[params.volumePreference].label,
-      setsRange: VOLUME_MAP[params.volumePreference].sets,
-    })
+    // Etapa 1 — esqueleto da semana (divisão adaptada à ênfase)
+    const skeleton = await withRetry(() => generateWeekSkeleton(ctx))
 
-    // Save each primary exercise slot to the DB as a single Workout
-    const exerciseRecords = await Promise.all(
-      plan.exercises.map(async (slot) => {
-        const ex = slot.primary
-        let exercise = await prisma.exercise.findFirst({ where: { name: ex.name } })
-        if (!exercise) {
-          exercise = await prisma.exercise.create({
-            data: {
-              name: ex.name,
-              muscleGroup: slot.muscleGroup,
-              equipment: ex.equipment,
-              instructions: ex.notes,
-            },
-          })
-        }
-        return { ...ex, exerciseId: exercise.id, muscleGroup: slot.muscleGroup }
-      })
+    // Etapa 2 — todos os dias em paralelo, cada um com retry próprio
+    const days = await Promise.all(
+      skeleton.days.map(day => withRetry(() => generateProgramDay(ctx, skeleton, day)))
     )
 
-    const muscleGroups = [...new Set(plan.exercises.map(e => e.muscleGroup))]
-
-    await prisma.workout.create({
-      data: {
-        userId: dbUser.id,
-        name: plan.name,
-        muscleGroups,
-        exercises: {
-          create: exerciseRecords.map((ex, i) => ({
-            exerciseId: ex.exerciseId,
-            targetSets: ex.sets,
-            targetReps: parseInt(ex.reps.split('-')[0], 10) || 10,
-            order: i,
-          })),
-        },
-      },
-    })
-
-    revalidatePath('/app/treino')
-    return { success: true, plan }
+    const plan: SmartProgramPlan = {
+      programName: skeleton.programName,
+      weeklyRationale: skeleton.weeklyRationale,
+      days,
+      tips: [],
+      cardio: skeleton.cardio && skeleton.cardio.length > 0 ? skeleton.cardio : undefined,
+    }
+    return { plan }
   } catch (e) {
-    console.error(e)
-    return { error: 'Erro ao gerar plano de treino. Tente novamente.' }
+    reportError('ia:generateProgram', e, { userId: dbUser.id, method: params.methodId, days: params.daysPerWeek })
+    return { error: 'Erro ao gerar o programa. Tente novamente.' }
   }
 }
 
@@ -133,7 +134,7 @@ const LEVEL_BY_ACTIVITY: Record<string, string> = {
   VERY_ACTIVE: 'Avançado',
 }
 
-export async function generateAutoWorkoutPlan(): Promise<{ plan?: SmartWorkoutPlan; error?: string }> {
+export async function generateAutoProgramAction(): Promise<{ plan?: SmartProgramPlan; error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
@@ -159,32 +160,21 @@ export async function generateAutoWorkoutPlan(): Promise<{ plan?: SmartWorkoutPl
     : profile.goalType === 'GAIN_MUSCLE' ? 'high'
     : 'moderate'
 
-  const method = WORKOUT_METHODS.find(m => m.id === auto.methodId)
-  if (!method) return { error: 'Método inválido' }
-
-  const splits = method.splits[auto.days as keyof typeof method.splits] ?? []
-
-  try {
-    const plan = await generateWorkoutPlan({
-      method: auto.methodId,
-      methodName: method.name,
-      daysPerWeek: auto.days,
-      goal,
-      level,
-      splits,
-      sessionDuration: auto.sessionDuration,
-      includeCardio,
-      cardioGoal: goal,
-      dailyCalorieGoal: profile.calorieGoal ?? undefined,
-      volumeLabel: VOLUME_MAP[volumePreference].label,
-      setsRange: VOLUME_MAP[volumePreference].sets,
-    })
-
-    return { plan }
-  } catch (e) {
-    console.error(e)
-    return { error: 'Erro ao gerar plano automático. Tente novamente.' }
-  }
+  return generateProgramAction({
+    methodId: auto.methodId,
+    daysPerWeek: auto.days,
+    goal,
+    level,
+    sessionDuration: auto.sessionDuration,
+    includeCardio,
+    volumePreference,
+    emphasis:
+      profile.sex === 'female'
+        ? 'Equilibrado com leve prioridade para inferiores e glúteos (padrão do perfil — a aluna não personalizou)'
+        : 'Equilibrado — todos os grupos com volume semelhante',
+    equipment: 'Academia completa (máquinas, barras e halteres)',
+    limitations: '',
+  })
 }
 
 // ─── Generate Diet Plan ────────────────────────────────────────────────────

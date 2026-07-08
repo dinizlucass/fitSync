@@ -4,18 +4,18 @@ import { useState, useRef, useEffect, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { WORKOUT_METHODS } from '@/lib/workout-methods'
 import {
-  generateAndSaveWorkoutPlan,
-  generateAutoWorkoutPlan,
+  generateProgramAction,
+  generateAutoProgramAction,
   generateDietPlanAction,
   sendChatMessage,
   refineMealVariantAction,
   refineExerciseAction,
 } from '@/app/actions/ai'
 import { saveDietTemplateAction, applyTemplateToTodayAction } from '@/app/actions/diet'
-import { saveGeneratedWorkout } from '@/app/actions/workout'
+import { saveProgramAction } from '@/app/actions/workout'
 import type { ChatMessage } from '@/lib/openai'
 import type { SmartDietPlan } from '@/lib/diet-types'
-import type { SmartWorkoutPlan } from '@/lib/workout-types'
+import type { SmartProgramPlan } from '@/lib/workout-types'
 import { Suspense } from 'react'
 
 type Tab = 'treino' | 'dieta' | 'chat'
@@ -40,6 +40,34 @@ const PREFERENCES = [
   'Low carb', 'Sem frutos do mar', 'Sem ovos',
 ]
 
+// ─── Wizard de treino: ênfase, equipamento ─────────────────────────────────
+
+const EMPHASIS_OPTIONS = [
+  { id: 'balanced', icon: '⚖️', label: 'Equilibrado', desc: 'Todos os grupos por igual' },
+  { id: 'lower', icon: '🦵', label: 'Pernas & Glúteos', desc: '~2x mais volume de inferiores' },
+  { id: 'upper', icon: '💪', label: 'Superiores', desc: 'Peito, costas, ombros e braços' },
+  { id: 'custom', icon: '🎯', label: 'Personalizar', desc: 'Escolha os grupos prioritários' },
+] as const
+
+const MUSCLE_GROUP_OPTIONS = [
+  'Glúteos', 'Quadríceps', 'Posteriores de coxa', 'Panturrilhas',
+  'Costas', 'Peito', 'Ombros', 'Bíceps', 'Tríceps', 'Abdômen',
+]
+
+const EQUIPMENT_OPTIONS = [
+  { id: 'full_gym', label: 'Academia completa', desc: 'Máquinas, barras e halteres' },
+  { id: 'basic_gym', label: 'Academia básica', desc: 'Condomínio, pouca variedade' },
+  { id: 'home_dumbbells', label: 'Halteres em casa', desc: 'Halteres e elásticos' },
+  { id: 'bodyweight', label: 'Peso corporal', desc: 'Sem equipamento' },
+] as const
+
+const EQUIPMENT_LABEL: Record<string, string> = {
+  full_gym: 'Academia completa (máquinas, barras, halteres e polias)',
+  basic_gym: 'Academia básica de condomínio (halteres, poucas máquinas, sem grande variedade)',
+  home_dumbbells: 'Treino em casa com halteres e elásticos',
+  bodyweight: 'Somente peso corporal (sem equipamento)',
+}
+
 function Spinner() {
   return (
     <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -60,13 +88,20 @@ function WorkoutTab() {
   const [volumePreference, setVolumePreference] = useState<'low' | 'moderate' | 'high'>('moderate')
   const [volumeAutoSetDuration, setVolumeAutoSetDuration] = useState(true)
   const [includeCardio, setIncludeCardio] = useState(false)
+  const [emphasisId, setEmphasisId] = useState<'balanced' | 'lower' | 'upper' | 'custom'>('balanced')
+  const [priorityGroups, setPriorityGroups] = useState<string[]>([])
+  const [equipment, setEquipment] = useState<'full_gym' | 'basic_gym' | 'home_dumbbells' | 'bodyweight'>('full_gym')
+  const [limitations, setLimitations] = useState('')
   const [autoMode, setAutoMode] = useState(false)
-  const [plan, setPlan] = useState<SmartWorkoutPlan | null>(null)
-  const [selectedExercises, setSelectedExercises] = useState<Record<number, number | null>>({})
-  const [refineExTarget, setRefineExTarget] = useState<number | null>(null)
+  const [plan, setPlan] = useState<SmartProgramPlan | null>(null)
+  const [activeDay, setActiveDay] = useState(0)
+  // chaves "dia-exercicio" (ex: "0-2") para alternativas/refino por dia
+  const [selectedExercises, setSelectedExercises] = useState<Record<string, number | null>>({})
+  const [refineExTarget, setRefineExTarget] = useState<string | null>(null)
   const [refineExInput, setRefineExInput] = useState('')
-  const [refineExLoading, setRefineExLoading] = useState<number | null>(null)
-  const [refineExFeedback, setRefineExFeedback] = useState<Record<number, string>>({})
+  const [refineExLoading, setRefineExLoading] = useState<string | null>(null)
+  const [refineExFeedback, setRefineExFeedback] = useState<Record<string, string>>({})
+  const [replaceExisting, setReplaceExisting] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -75,10 +110,31 @@ function WorkoutTab() {
   const method = WORKOUT_METHODS.find(m => m.id === selectedMethod)
   const availableDays = method?.days ?? []
 
+  function emphasisLabel(): string {
+    if (emphasisId === 'lower') return 'Ênfase em pernas e glúteos — ~2x mais volume de inferiores na semana (ex.: num ABC, 2 dias de inferior e 1 de superior)'
+    if (emphasisId === 'upper') return 'Ênfase em superiores — mais volume para peito, costas, ombros e braços'
+    if (emphasisId === 'custom' && priorityGroups.length > 0) {
+      return `Grupos prioritários: ${priorityGroups.join(', ')} — dê a eles ~2x mais volume semanal e prioridade na ordem dos treinos`
+    }
+    return 'Equilibrado — todos os grupos com volume semelhante'
+  }
+
+  function togglePriorityGroup(g: string) {
+    setPriorityGroups(prev =>
+      prev.includes(g) ? prev.filter(x => x !== g) : prev.length >= 3 ? prev : [...prev, g]
+    )
+  }
+
   function handleSelectMethod(id: string) {
     setSelectedMethod(id)
     setDaysPerWeek(null)
     setStep('config')
+  }
+
+  function resetResultState() {
+    setSelectedExercises({})
+    setRefineExFeedback({})
+    setActiveDay(0)
   }
 
   function handleGenerate() {
@@ -87,7 +143,7 @@ function WorkoutTab() {
     setAutoMode(false)
     setStep('generating')
     startTransition(async () => {
-      const res = await generateAndSaveWorkoutPlan({
+      const res = await generateProgramAction({
         methodId: selectedMethod,
         daysPerWeek,
         goal,
@@ -95,13 +151,16 @@ function WorkoutTab() {
         sessionDuration,
         includeCardio,
         volumePreference,
+        emphasis: emphasisLabel(),
+        equipment: EQUIPMENT_LABEL[equipment],
+        limitations: limitations.trim() || undefined,
       })
       if (res.error) {
         setError(res.error)
         setStep('config')
       } else if (res.plan) {
         setPlan(res.plan)
-        setSelectedExercises({})
+        resetResultState()
         setStep('result')
       }
     })
@@ -112,28 +171,28 @@ function WorkoutTab() {
     setAutoMode(true)
     setStep('generating')
     startTransition(async () => {
-      const res = await generateAutoWorkoutPlan()
+      const res = await generateAutoProgramAction()
       if (res.error) {
         setError(res.error)
         setAutoMode(false)
         setStep('method')
       } else if (res.plan) {
         setPlan(res.plan)
-        setSelectedExercises({})
+        resetResultState()
         setStep('result')
       }
     })
   }
 
-  async function handleRefineExercise(idx: number) {
+  async function handleRefineExercise(dayIdx: number, exIdx: number) {
     if (!plan || !refineExInput.trim()) return
-    const slot = plan.exercises[idx]
-    const currentEx = selectedExercises[idx] !== null && selectedExercises[idx] !== undefined
-      ? slot.alternatives[selectedExercises[idx] as number]
-      : slot.primary
+    const key = `${dayIdx}-${exIdx}`
+    const slot = plan.days[dayIdx].exercises[exIdx]
+    const sel = selectedExercises[key]
+    const currentEx = sel !== null && sel !== undefined ? slot.alternatives[sel] : slot.primary
     if (!currentEx) return
 
-    setRefineExLoading(idx)
+    setRefineExLoading(key)
     setRefineExTarget(null)
     const res = await refineExerciseAction({
       exerciseName: currentEx.name,
@@ -147,37 +206,30 @@ function WorkoutTab() {
 
     if (res.newExercise && plan) {
       const newPlan = structuredClone(plan)
-      newPlan.exercises[idx].primary = res.newExercise
+      newPlan.days[dayIdx].exercises[exIdx].primary = res.newExercise
       setPlan(newPlan)
-      setSelectedExercises(prev => ({ ...prev, [idx]: null }))
-      setRefineExFeedback(prev => ({ ...prev, [idx]: res.newExercise!.explanation }))
-      setTimeout(() => setRefineExFeedback(prev => { const n = { ...prev }; delete n[idx]; return n }), 4000)
+      setSelectedExercises(prev => ({ ...prev, [key]: null }))
+      setRefineExFeedback(prev => ({ ...prev, [key]: res.newExercise!.explanation }))
+      setTimeout(() => setRefineExFeedback(prev => { const n = { ...prev }; delete n[key]; return n }), 4000)
     }
   }
 
-  async function handleSaveWorkout() {
+  async function handleSaveProgram() {
     if (!plan || saving) return
     setSaving(true)
-    const exercisesToSave = plan.exercises.map((slot, i) => {
-      const selectedAltIdx = selectedExercises[i]
-      const ex = selectedAltIdx !== null && selectedAltIdx !== undefined
-        ? slot.alternatives[selectedAltIdx]
-        : slot.primary
-      return {
-        name: ex.name,
-        muscleGroup: slot.muscleGroup,
-        sets: ex.sets,
-        reps: ex.reps,
-      }
-    })
-    const res = await saveGeneratedWorkout({
-      name: plan.name,
-      muscleGroups: [...new Set(plan.exercises.map(e => e.muscleGroup))],
-      exercises: exercisesToSave,
-    })
+    const daysToSave = plan.days.map((day, dIdx) => ({
+      name: `${day.label} — ${day.focus}`,
+      muscleGroups: [...new Set(day.exercises.map(e => e.muscleGroup))],
+      exercises: day.exercises.map((slot, i) => {
+        const sel = selectedExercises[`${dIdx}-${i}`]
+        const ex = sel !== null && sel !== undefined ? slot.alternatives[sel] : slot.primary
+        return { name: ex.name, muscleGroup: slot.muscleGroup, sets: ex.sets, reps: ex.reps }
+      }),
+    }))
+    const res = await saveProgramAction({ days: daysToSave, replaceExisting })
     setSaving(false)
     if (res.success) router.push('/app/treino')
-    else setError(res.error ?? 'Erro ao salvar treino')
+    else setError(res.error ?? 'Erro ao salvar o programa')
   }
 
   if (step === 'method') {
@@ -305,6 +357,81 @@ function WorkoutTab() {
         </div>
 
         <div>
+          <p className="text-sm font-medium mb-2">Ênfase muscular</p>
+          <p className="text-xs mb-2" style={{ color: 'var(--color-text-muted)' }}>
+            A divisão da semana é montada em função disso — ex.: ABC com 2x perna.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {EMPHASIS_OPTIONS.map(e => (
+              <button
+                key={e.id}
+                onClick={() => setEmphasisId(e.id)}
+                className="flex items-center gap-2 p-3 rounded-xl border text-sm text-left transition-all"
+                style={{
+                  borderColor: emphasisId === e.id ? 'var(--color-primary)' : 'var(--color-border)',
+                  backgroundColor: emphasisId === e.id ? '#E1F5EE' : 'var(--color-surface)',
+                  color: emphasisId === e.id ? 'var(--color-primary)' : 'inherit',
+                }}
+              >
+                <span>{e.icon}</span>
+                <span>
+                  <span className="block font-medium">{e.label}</span>
+                  <span className="block text-xs opacity-70">{e.desc}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          {emphasisId === 'custom' && (
+            <div className="mt-3">
+              <p className="text-xs mb-2" style={{ color: 'var(--color-text-muted)' }}>
+                Escolha até 3 grupos prioritários:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {MUSCLE_GROUP_OPTIONS.map(g => {
+                  const on = priorityGroups.includes(g)
+                  return (
+                    <button
+                      key={g}
+                      onClick={() => togglePriorityGroup(g)}
+                      className="text-xs px-3 py-1.5 rounded-full border transition-all"
+                      style={{
+                        borderColor: on ? 'var(--color-primary)' : 'var(--color-border)',
+                        backgroundColor: on ? '#E1F5EE' : 'transparent',
+                        color: on ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                        fontWeight: on ? 500 : 400,
+                      }}
+                    >
+                      {on ? `✓ ${g}` : g}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <p className="text-sm font-medium mb-2">Onde você treina?</p>
+          <div className="grid grid-cols-2 gap-2">
+            {EQUIPMENT_OPTIONS.map(eq => (
+              <button
+                key={eq.id}
+                onClick={() => setEquipment(eq.id)}
+                className="p-3 rounded-xl border text-sm text-left transition-all"
+                style={{
+                  borderColor: equipment === eq.id ? 'var(--color-primary)' : 'var(--color-border)',
+                  backgroundColor: equipment === eq.id ? '#E1F5EE' : 'var(--color-surface)',
+                  color: equipment === eq.id ? 'var(--color-primary)' : 'inherit',
+                }}
+              >
+                <span className="block font-medium">{eq.label}</span>
+                <span className="block text-xs opacity-70">{eq.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
           <p className="text-sm font-medium mb-2">Duração da sessão</p>
           <div className="flex gap-2 flex-wrap">
             {[30, 45, 60, 90].map(d => (
@@ -404,6 +531,22 @@ function WorkoutTab() {
           </div>
         </div>
 
+        <div>
+          <p className="text-sm font-medium mb-2">Limitações e preferências <span className="font-normal text-xs" style={{ color: 'var(--color-text-muted)' }}>(opcional)</span></p>
+          <textarea
+            value={limitations}
+            onChange={e => setLimitations(e.target.value)}
+            rows={2}
+            maxLength={300}
+            placeholder="Ex: dor no joelho direito, odeio agachamento livre, quero hip thrust..."
+            className="w-full text-sm px-3 py-2.5 rounded-xl border outline-none resize-none"
+            style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)' }}
+          />
+          <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+            A IA evita exercícios de risco para suas limitações e inclui o que você gosta.
+          </p>
+        </div>
+
         {error && (
           <p className="text-sm p-3 rounded-xl" style={{ backgroundColor: '#FEE2E2', color: '#991B1B' }}>{error}</p>
         )}
@@ -414,7 +557,7 @@ function WorkoutTab() {
           className="w-full py-3 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-50"
           style={{ backgroundColor: 'var(--color-primary)' }}
         >
-          Gerar plano de treino com IA
+          {daysPerWeek ? `Gerar programa completo (${daysPerWeek} treinos)` : 'Gerar programa completo'}
         </button>
       </div>
     )
@@ -428,21 +571,23 @@ function WorkoutTab() {
             <circle cx="12" cy="12" r="10" stroke="#1D9E75" strokeWidth="3" strokeDasharray="32" strokeDashoffset="12" strokeLinecap="round" />
           </svg>
         </div>
-        <p className="text-sm font-medium">Gerando seu plano de treino...</p>
+        <p className="text-sm font-medium">Montando seu programa completo...</p>
         <p className="text-xs text-center max-w-xs" style={{ color: 'var(--color-text-muted)' }}>
-          A IA está montando um treino personalizado para você. Isso pode levar alguns segundos.
+          A IA está desenhando a divisão da semana e gerando cada um dos
+          {daysPerWeek ? ` ${daysPerWeek}` : ''} treinos. Leva até 1 minuto.
         </p>
       </div>
     )
   }
 
   if (step === 'result' && plan) {
+    const day = plan.days[activeDay]
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="font-medium">{plan.name}</p>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-medium">{plan.programName}</p>
               {autoMode && (
                 <span
                   className="text-xs font-medium px-2 py-0.5"
@@ -457,134 +602,168 @@ function WorkoutTab() {
                 </span>
               )}
             </div>
-            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              {plan.duration} · {plan.exercises.length} exercícios
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+              {plan.days.length} treinos por semana
             </p>
           </div>
           <button
             onClick={() => { setStep('method'); setPlan(null); setSelectedMethod(null); setAutoMode(false) }}
-            className="text-xs px-3 py-1.5 rounded-lg border"
+            className="text-xs px-3 py-1.5 rounded-lg border flex-shrink-0"
             style={{ borderColor: 'var(--color-border)' }}
           >
             Gerar novo
           </button>
         </div>
 
-        <div className="space-y-3">
-          {plan.exercises.map((slot, idx) => {
-            const selectedAltIdx = selectedExercises[idx]
-            const displayEx = selectedAltIdx !== null && selectedAltIdx !== undefined
-              ? slot.alternatives[selectedAltIdx]
-              : slot.primary
+        {/* Racional da semana */}
+        {plan.weeklyRationale && (
+          <p className="text-xs p-3 rounded-xl" style={{ backgroundColor: '#E1F5EE', color: '#085041' }}>
+            {plan.weeklyRationale}
+          </p>
+        )}
 
-            return (
-              <div key={idx} className="rounded-xl border p-4" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)' }}>
-                {/* Muscle group badge */}
-                <span className="text-xs px-2 py-0.5 rounded-full mb-2 inline-block" style={{ backgroundColor: '#E1F5EE', color: '#085041' }}>
-                  {slot.muscleGroup}
-                </span>
-
-                {/* Current exercise */}
-                <div className="mt-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{displayEx.name}</p>
-                      {displayEx.notes && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{displayEx.notes}</p>}
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#E1F5EE', color: '#085041' }}>
-                        {displayEx.sets}×{displayEx.reps}
-                      </span>
-                      <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{displayEx.rest}</span>
-                    </div>
-                  </div>
-                  <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>{displayEx.equipment}</p>
-                </div>
-
-                {/* Exercise option selector (primary + alternatives) */}
-                {slot.alternatives.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {[slot.primary, ...slot.alternatives].map((opt, optIdx) => {
-                      const currentIdx = selectedExercises[idx]
-                      const isSelected = optIdx === 0
-                        ? (currentIdx === null || currentIdx === undefined)
-                        : currentIdx === optIdx - 1
-                      return (
-                        <button
-                          key={optIdx}
-                          onClick={() => setSelectedExercises(prev => ({
-                            ...prev,
-                            [idx]: optIdx === 0 ? null : optIdx - 1,
-                          }))}
-                          className="text-xs px-3 py-1.5 rounded-full border transition-all"
-                          style={{
-                            borderColor: isSelected ? 'var(--color-primary)' : 'var(--color-border)',
-                            backgroundColor: isSelected ? '#E1F5EE' : 'transparent',
-                            color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                            fontWeight: isSelected ? 500 : 400,
-                          }}
-                        >
-                          {optIdx === 0 ? `✓ ${opt.name}` : opt.name}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {/* Refine feedback */}
-                {refineExFeedback[idx] && (
-                  <p className="text-xs mt-2 p-2 rounded-lg" style={{ backgroundColor: '#E1F5EE', color: '#085041' }}>
-                    {refineExFeedback[idx]}
-                  </p>
-                )}
-
-                {/* Refine loading */}
-                {refineExLoading === idx && (
-                  <div className="flex items-center gap-2 mt-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                    <Spinner /> Ajustando exercício...
-                  </div>
-                )}
-
-                {/* Refine button */}
-                <div className="mt-3">
-                  <button
-                    onClick={() => setRefineExTarget(refineExTarget === idx ? null : idx)}
-                    className="text-xs"
-                    style={{ color: 'var(--color-primary)' }}
-                  >
-                    ↺ Ajustar
-                  </button>
-                  {refineExTarget === idx && (
-                    <div className="flex gap-2 mt-2">
-                      <input
-                        value={refineExInput}
-                        onChange={e => setRefineExInput(e.target.value)}
-                        placeholder="Ex: sem equipamento, mais fácil..."
-                        className="flex-1 px-3 py-1.5 rounded-lg border text-xs outline-none"
-                        style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)' }}
-                        onKeyDown={e => e.key === 'Enter' && handleRefineExercise(idx)}
-                      />
-                      <button
-                        onClick={() => handleRefineExercise(idx)}
-                        disabled={!refineExInput.trim()}
-                        className="px-3 py-1.5 rounded-lg text-xs text-white disabled:opacity-50"
-                        style={{ backgroundColor: 'var(--color-primary)' }}
-                      >
-                        Enviar
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+        {/* Abas dos dias */}
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          {plan.days.map((d, i) => (
+            <button
+              key={i}
+              onClick={() => setActiveDay(i)}
+              className="flex-shrink-0 px-3 py-2 rounded-xl border text-left transition-all"
+              style={{
+                borderColor: activeDay === i ? 'var(--color-primary)' : 'var(--color-border)',
+                backgroundColor: activeDay === i ? '#E1F5EE' : 'var(--color-surface)',
+              }}
+            >
+              <span className="block text-xs font-medium" style={{ color: activeDay === i ? 'var(--color-primary)' : 'inherit' }}>
+                {d.label.replace('Treino ', '')}
+              </span>
+              <span className="block text-xs mt-0.5 whitespace-nowrap" style={{ color: 'var(--color-text-muted)', fontSize: '10px' }}>
+                {d.focus}
+              </span>
+            </button>
+          ))}
         </div>
 
-        {/* Methodology — how to execute */}
-        {(plan.methodology ?? []).length > 0 && (
+        {/* Dia ativo */}
+        <div>
+          <p className="text-sm font-medium mb-2">{day.label} — {day.focus}</p>
+          <div className="space-y-3">
+            {day.exercises.map((slot, idx) => {
+              const key = `${activeDay}-${idx}`
+              const selectedAltIdx = selectedExercises[key]
+              const displayEx = selectedAltIdx !== null && selectedAltIdx !== undefined
+                ? slot.alternatives[selectedAltIdx]
+                : slot.primary
+
+              return (
+                <div key={key} className="rounded-xl border p-4" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)' }}>
+                  {/* Muscle group badge */}
+                  <span className="text-xs px-2 py-0.5 rounded-full mb-2 inline-block" style={{ backgroundColor: '#E1F5EE', color: '#085041' }}>
+                    {slot.muscleGroup}
+                  </span>
+
+                  {/* Current exercise */}
+                  <div className="mt-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{displayEx.name}</p>
+                        {displayEx.notes && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{displayEx.notes}</p>}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#E1F5EE', color: '#085041' }}>
+                          {displayEx.sets}×{displayEx.reps}
+                        </span>
+                        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{displayEx.rest}</span>
+                      </div>
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>{displayEx.equipment}</p>
+                  </div>
+
+                  {/* Exercise option selector (primary + alternatives) */}
+                  {slot.alternatives.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {[slot.primary, ...slot.alternatives].map((opt, optIdx) => {
+                        const currentIdx = selectedExercises[key]
+                        const isSelected = optIdx === 0
+                          ? (currentIdx === null || currentIdx === undefined)
+                          : currentIdx === optIdx - 1
+                        return (
+                          <button
+                            key={optIdx}
+                            onClick={() => setSelectedExercises(prev => ({
+                              ...prev,
+                              [key]: optIdx === 0 ? null : optIdx - 1,
+                            }))}
+                            className="text-xs px-3 py-1.5 rounded-full border transition-all"
+                            style={{
+                              borderColor: isSelected ? 'var(--color-primary)' : 'var(--color-border)',
+                              backgroundColor: isSelected ? '#E1F5EE' : 'transparent',
+                              color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                              fontWeight: isSelected ? 500 : 400,
+                            }}
+                          >
+                            {optIdx === 0 ? `✓ ${opt.name}` : opt.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Refine feedback */}
+                  {refineExFeedback[key] && (
+                    <p className="text-xs mt-2 p-2 rounded-lg" style={{ backgroundColor: '#E1F5EE', color: '#085041' }}>
+                      {refineExFeedback[key]}
+                    </p>
+                  )}
+
+                  {/* Refine loading */}
+                  {refineExLoading === key && (
+                    <div className="flex items-center gap-2 mt-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                      <Spinner /> Ajustando exercício...
+                    </div>
+                  )}
+
+                  {/* Refine button */}
+                  <div className="mt-3">
+                    <button
+                      onClick={() => setRefineExTarget(refineExTarget === key ? null : key)}
+                      className="text-xs"
+                      style={{ color: 'var(--color-primary)' }}
+                    >
+                      ↺ Ajustar
+                    </button>
+                    {refineExTarget === key && (
+                      <div className="flex gap-2 mt-2">
+                        <input
+                          value={refineExInput}
+                          onChange={e => setRefineExInput(e.target.value)}
+                          placeholder="Ex: sem equipamento, mais fácil..."
+                          className="flex-1 px-3 py-1.5 rounded-lg border text-xs outline-none"
+                          style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)' }}
+                          onKeyDown={e => e.key === 'Enter' && handleRefineExercise(activeDay, idx)}
+                        />
+                        <button
+                          onClick={() => handleRefineExercise(activeDay, idx)}
+                          disabled={!refineExInput.trim()}
+                          className="px-3 py-1.5 rounded-lg text-xs text-white disabled:opacity-50"
+                          style={{ backgroundColor: 'var(--color-primary)' }}
+                        >
+                          Enviar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Methodology do dia ativo */}
+        {(day.methodology ?? []).length > 0 && (
           <div style={{ borderLeft: '3px solid var(--color-primary)', paddingLeft: '12px' }}>
-            <p className="text-sm font-semibold mb-2">📋 Como executar</p>
-            {(plan.methodology ?? []).map((tip, i) => (
+            <p className="text-sm font-semibold mb-2">📋 Como executar o {day.label}</p>
+            {(day.methodology ?? []).map((tip, i) => (
               <p key={i} className="text-sm mb-1" style={{ color: 'var(--color-text-muted)' }}>
                 • {tip}
               </p>
@@ -648,13 +827,28 @@ function WorkoutTab() {
           <p className="text-sm p-3 rounded-xl" style={{ backgroundColor: '#FEE2E2', color: '#991B1B' }}>{error}</p>
         )}
 
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={replaceExisting}
+            onChange={e => setReplaceExisting(e.target.checked)}
+            className="w-4 h-4 accent-[#1D9E75]"
+          />
+          <span>
+            Substituir meus treinos atuais
+            <span className="block text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              Os antigos são arquivados — seu histórico e recordes continuam salvos.
+            </span>
+          </span>
+        </label>
+
         <button
-          onClick={handleSaveWorkout}
+          onClick={handleSaveProgram}
           disabled={saving}
           className="w-full py-3 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           style={{ backgroundColor: 'var(--color-primary)' }}
         >
-          {saving ? <><Spinner /> Salvando...</> : 'Salvar treino'}
+          {saving ? <><Spinner /> Salvando...</> : `Salvar programa (${plan.days.length} treinos)`}
         </button>
       </div>
     )

@@ -10,8 +10,8 @@ export async function GET() {
   if (!dbUser) return Response.json({ error: 'Not found' }, { status: 404 })
 
   const workouts = await prisma.workout.findMany({
-    where: { userId: dbUser.id },
-    orderBy: { createdAt: 'desc' },
+    where: { userId: dbUser.id, archived: false },
+    orderBy: { createdAt: 'asc' },
     include: {
       exercises: {
         include: { exercise: true },

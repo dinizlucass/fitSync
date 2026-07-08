@@ -32,3 +32,32 @@ export interface SmartWorkoutPlan {
 }
 
 export type VolumePreference = 'low' | 'moderate' | 'high'
+
+// ─── Programa completo (todos os dias da divisão) ──────────────────────────
+
+/** Um dia do esqueleto da semana — a divisão real, montada pela IA conforme a ênfase. */
+export interface ProgramDaySkeleton {
+  label: string          // "Treino A"
+  focus: string          // "Quadríceps e Glúteos"
+  muscleGroups: string[] // ["Quadríceps", "Glúteos", "Panturrilhas"]
+}
+
+export interface WeekSkeleton {
+  programName: string        // "ABC — Ênfase em Inferiores"
+  weeklyRationale: string    // 1-2 frases explicando a lógica da semana
+  days: ProgramDaySkeleton[]
+  cardio?: CardioRecommendation[]
+}
+
+export interface ProgramDayPlan extends ProgramDaySkeleton {
+  exercises: WorkoutExerciseSlot[]
+  methodology: string[]
+}
+
+export interface SmartProgramPlan {
+  programName: string
+  weeklyRationale: string
+  days: ProgramDayPlan[]
+  tips: string[]
+  cardio?: CardioRecommendation[]
+}

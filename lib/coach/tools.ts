@@ -6,7 +6,7 @@
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
 import { prisma } from '@/lib/prisma'
 import { parseMealMessage } from '@/lib/openai'
-import { buildUserContext } from '@/lib/coach/context'
+import { buildUserContext, pickNextWorkout } from '@/lib/coach/context'
 import { dayRange, scaleMacros, round } from '@/lib/coach/shared'
 
 type MealTypeEnum = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK' | 'PRE_WORKOUT' | 'POST_WORKOUT' | 'CEIA'
@@ -304,12 +304,8 @@ async function getResumoNutricional(userId: string, data?: string): Promise<stri
 
 async function getTreinoDoDia(userId: string): Promise<string> {
   const { start, end } = dayRange()
-  // exclui "Treino avulso" (0 exercícios) — não é um plano de verdade
-  const workout = await prisma.workout.findFirst({
-    where: { userId, exercises: { some: {} } },
-    orderBy: { createdAt: 'desc' },
-    include: { exercises: { include: { exercise: true }, orderBy: { order: 'asc' } } },
-  })
+  // Rotação do programa: sugere o treino menos recentemente feito
+  const workout = await pickNextWorkout(userId)
 
   if (!workout) {
     return JSON.stringify({ treino: null, aviso: 'Nenhum plano de treino cadastrado. Sugira gerar um no app (aba IA → Treino).' })
@@ -335,8 +331,8 @@ async function getTreinoDoDia(userId: string): Promise<string> {
 
 async function listarTreinos(userId: string): Promise<string> {
   const workouts = await prisma.workout.findMany({
-    where: { userId, exercises: { some: {} } },
-    orderBy: { createdAt: 'desc' },
+    where: { userId, archived: false, exercises: { some: {} } },
+    orderBy: { createdAt: 'asc' },
     include: { _count: { select: { exercises: true } } },
   })
 
