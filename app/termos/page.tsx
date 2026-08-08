@@ -58,11 +58,12 @@ export default function TermosPage() {
 
         <H2>4. Assinatura, período de teste e pagamento</H2>
         <P>
-          O FitSync é oferecido por assinatura: plano mensal de R$ 29,90/mês ou plano anual de R$ 257/ano, ambos
-          com 7 (sete) dias de teste gratuito com acesso completo. A primeira cobrança ocorre após o período de
-          teste. Os pagamentos são processados pela Asaas Gestão Financeira S.A. via PIX, boleto ou cartão de
-          crédito. A assinatura é renovada automaticamente a cada ciclo até o cancelamento. Os preços podem ser
-          reajustados mediante aviso prévio por e-mail ou no aplicativo, valendo para o ciclo seguinte.
+          O FitSync é oferecido por assinatura: plano mensal de R$ 29,90/mês, com 7 (sete) dias de teste gratuito
+          e acesso completo (a primeira cobrança ocorre após o período de teste), ou plano anual de R$ 257/ano,
+          com preço reduzido e cobrança no ato da contratação. Os pagamentos são processados pela Asaas Gestão
+          Financeira S.A. via cartão de crédito. A assinatura é renovada automaticamente a cada ciclo até o
+          cancelamento. Os preços podem ser reajustados mediante aviso prévio por e-mail ou no aplicativo, valendo
+          para o ciclo seguinte.
         </P>
 
         <H2>5. Cancelamento e reembolso</H2>

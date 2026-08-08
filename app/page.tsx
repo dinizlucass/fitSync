@@ -68,7 +68,7 @@ export default function LandingPage() {
             </div>
 
             <p className="text-xs mb-16" style={{ color: 'var(--color-text-muted)' }}>
-              {monthly.trialDays} dias grátis • PIX, boleto ou cartão • Cancele quando quiser
+              {monthly.trialDays} dias grátis no mensal • cartão de crédito • Cancele quando quiser
             </p>
 
             {/* Phone Mockups */}
@@ -333,7 +333,7 @@ export default function LandingPage() {
           <div className="text-center mb-12">
             <h2 className="text-3xl font-medium tracking-tight mb-3">Planos simples e transparentes</h2>
             <p className="text-base" style={{ color: 'var(--color-text-muted)' }}>
-              {monthly.trialDays} dias grátis em qualquer plano · cancele quando quiser
+              {monthly.trialDays} dias grátis no mensal · anual com desconto · cancele quando quiser
             </p>
           </div>
           <div className="grid sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
@@ -368,11 +368,11 @@ export default function LandingPage() {
                 <h3 className="text-base font-medium mb-1">Anual</h3>
                 <div className="text-3xl font-medium">{brl(annual.value)}<span className="text-base font-normal">/ano</span></div>
                 <div className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                  ≈ {brl(annualPerMonth)}/mês · <span className="font-medium" style={{ color: 'var(--color-primary)' }}>{annual.trialDays} dias grátis</span>
+                  ≈ {brl(annualPerMonth)}/mês · <span className="font-medium" style={{ color: 'var(--color-primary)' }}>economize {savingsPct}%</span>
                 </div>
               </div>
               <ul className="space-y-2 mb-6">
-                {['Tudo do plano mensal', `${savingsPct}% mais barato que o mensal`, 'Preço travado por 12 meses', 'PIX, boleto ou cartão'].map(item => (
+                {['Tudo do plano mensal', `${savingsPct}% mais barato que o mensal`, 'Preço travado por 12 meses', 'Pagamento seguro no cartão'].map(item => (
                   <li key={item} className="flex items-center gap-2 text-sm">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2.5">
                       <polyline points="20 6 9 17 4 12"/>
@@ -382,7 +382,7 @@ export default function LandingPage() {
                 ))}
               </ul>
               <Link href="/login?tab=signup" className="block text-center text-sm py-2.5 px-4 rounded-lg text-white font-medium transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--color-primary)' }}>
-                Começar {annual.trialDays} dias grátis
+                Assinar plano anual
               </Link>
             </div>
           </div>
