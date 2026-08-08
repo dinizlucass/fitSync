@@ -76,10 +76,12 @@ export async function POST(request: NextRequest) {
 
   if (!sub) return Response.json({ status: 'subscription_not_found' })
 
-  // PAYMENT_CREATED numa assinatura ainda PENDENTE = checkout concluído, cartão salvo,
-  // trial começou → TRIALING. Depois, o pagamento confirmado sobe para ACTIVE.
+  // PAYMENT_CREATED numa assinatura PENDENTE = checkout concluído, cartão salvo.
+  // Só há trial (→ TRIALING, libera acesso antes de pagar) quando trialEndsAt existe —
+  // ex.: plano mensal. No anual (sem trial) a cobrança é criada mas ainda não paga:
+  // fica PENDING e só sobe para ACTIVE no PAYMENT_CONFIRMED/RECEIVED.
   let newStatus = statusForEvent(event)
-  if (!newStatus && event === 'PAYMENT_CREATED' && sub.status === 'PENDING') {
+  if (!newStatus && event === 'PAYMENT_CREATED' && sub.status === 'PENDING' && sub.trialEndsAt) {
     newStatus = 'TRIALING'
   }
 

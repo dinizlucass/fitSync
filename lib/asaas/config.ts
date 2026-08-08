@@ -31,7 +31,7 @@ export const PLANS: Record<PlanId, Plan> = {
     name: 'Anual',
     value: 257,
     cycle: 'YEARLY',
-    trialDays: 7,
+    trialDays: 0, // sem trial: quem escolhe anual já decidiu — entra cobrando com desconto
     description: 'FitSync Premium — plano anual',
   },
 }

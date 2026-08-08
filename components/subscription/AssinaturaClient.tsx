@@ -166,6 +166,8 @@ export default function AssinaturaClient({
   // ── Estado: sem assinatura ativa (novo / pendente / cancelada) ──────
   const resumeCheckout = current && current.status === 'PENDING' ? current.checkoutUrl : null
   const selectedPlan = plans.find(p => p.id === selected) ?? plans[0]
+  const trialDays = selectedPlan?.trialDays ?? 0
+  const hasTrial = trialDays > 0
 
   return (
     <div>
@@ -215,7 +217,9 @@ export default function AssinaturaClient({
               {monthlyEquiv && (
                 <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>≈ {BRL(monthlyEquiv)}/mês</p>
               )}
-              <p className="text-xs mt-2" style={{ color: 'var(--color-primary)' }}>{p.trialDays} dias grátis</p>
+              <p className="text-xs mt-2" style={{ color: 'var(--color-primary)' }}>
+                {p.trialDays > 0 ? `${p.trialDays} dias grátis` : 'Melhor custo-benefício'}
+              </p>
             </button>
           )
         })}
@@ -227,14 +231,20 @@ export default function AssinaturaClient({
         className="w-full py-3 rounded-lg text-white font-medium disabled:opacity-50"
         style={{ backgroundColor: 'var(--color-primary)' }}
       >
-        {isPending ? 'Abrindo pagamento...' : `Começar ${selectedPlan?.trialDays ?? 7} dias grátis`}
+        {isPending
+          ? 'Abrindo pagamento...'
+          : hasTrial ? `Começar ${trialDays} dias grátis` : `Assinar plano ${selectedPlan?.name ?? ''}`}
       </button>
 
       {error && <p className="text-xs mt-2" style={{ color: 'var(--color-alert, #E24B4A)' }}>{error}</p>}
 
       <p className="text-xs mt-3 text-center leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
         Você informa o cartão na página segura do Asaas.<br />
-        Nada é cobrado agora — a 1ª cobrança é só em <strong>{fmtInDays(selectedPlan?.trialDays ?? 7)}</strong>. Cancele quando quiser.
+        {hasTrial ? (
+          <>Nada é cobrado agora — a 1ª cobrança é só em <strong>{fmtInDays(trialDays)}</strong>. Cancele quando quiser.</>
+        ) : (
+          <>A cobrança é feita hoje e você libera o FitSync completo na hora. Cancele quando quiser.</>
+        )}
       </p>
     </div>
   )
