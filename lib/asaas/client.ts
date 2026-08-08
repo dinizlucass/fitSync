@@ -131,7 +131,10 @@ export interface CreateCheckoutInput {
   externalReference: string              // = userId (amarra o webhook de volta)
   callback: { successUrl: string; cancelUrl: string; expiredUrl?: string }
   items: Array<{ name: string; quantity: number; value: number; description?: string }>
-  subscription: { cycle: string; nextDueDate: string; endDate?: string }
+  // externalReference DENTRO da subscription: o top-level do checkout NÃO propaga
+  // para a assinatura/pagamentos (comprovado). Aqui ele chega na assinatura e é
+  // herdado por todos os pagamentos → o webhook consegue amarrar de volta ao userId.
+  subscription: { cycle: string; nextDueDate: string; endDate?: string; externalReference?: string }
 }
 
 export interface AsaasCheckout {

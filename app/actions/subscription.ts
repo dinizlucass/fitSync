@@ -59,7 +59,9 @@ export async function startCheckout(params: {
         cancelUrl: `${base}/app/assinatura?status=cancel`,
       },
       items: [{ name: `FitSync Premium — ${plan.name}`, quantity: 1, value: plan.value }],
-      subscription: { cycle: plan.cycle, nextDueDate },
+      // externalReference na subscription (não só no top-level do checkout) para que a
+      // assinatura e todos os pagamentos carreguem o userId — é o que o webhook usa.
+      subscription: { cycle: plan.cycle, nextDueDate, externalReference: dbUser.id },
     })
 
     // Persiste o checkout pendente (o webhook completa quando o cartão passar)
