@@ -106,6 +106,7 @@ export interface MySubscription {
   plan: string
   value: number
   cycle: string
+  billingType: string
   checkoutUrl: string | null
   currentDueDate: string | null
   trialEndsAt: string | null
@@ -130,6 +131,7 @@ export async function getMySubscription(): Promise<MySubscription | null> {
     plan: sub.plan,
     value: sub.value,
     cycle: sub.cycle,
+    billingType: sub.billingType,
     checkoutUrl: sub.checkoutUrl,
     currentDueDate: sub.currentDueDate?.toISOString() ?? null,
     trialEndsAt: sub.trialEndsAt?.toISOString() ?? null,

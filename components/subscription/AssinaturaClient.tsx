@@ -111,36 +111,53 @@ export default function AssinaturaClient({
 
   // ── Estado: assinatura ativa / em teste ──────────────────────────────
   if (isActive) {
-    const label = STATUS_LABEL[current!.status] ?? STATUS_LABEL.ACTIVE
+    // Cortesia concedida pelo admin (billingType ADMIN): não tem cobrança nem
+    // assinatura no Asaas — mostra rótulo próprio, sem preço e sem botão cancelar.
+    const isComp = current!.billingType === 'ADMIN'
+    const label = isComp
+      ? { text: 'Premium ativo', color: 'var(--color-primary)' }
+      : (STATUS_LABEL[current!.status] ?? STATUS_LABEL.ACTIVE)
     return (
       <div className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)', borderRadius: 'var(--radius-card)' }}>
         <div className="flex items-center gap-2 mb-3">
           <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: label.color }} />
           <span className="text-sm font-medium" style={{ color: label.color }}>{label.text}</span>
         </div>
-        <p className="text-sm mb-1">
-          Plano <span className="font-medium">{current!.plan === 'annual' ? 'Anual' : 'Mensal'}</span> — {BRL(current!.value)}{cycleLabel(current!.cycle)}
-        </p>
-        {current!.status === 'TRIALING' && (
-          <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
-            Teste grátis ativo. 1ª cobrança em {fmtDate(current!.trialEndsAt ?? current!.currentDueDate)}.
+
+        {isComp ? (
+          <p className="text-sm mb-1">
+            Acesso <span className="font-medium">cortesia</span> liberado pela equipe FitSync. Aproveite o FitSync completo.
           </p>
+        ) : (
+          <>
+            <p className="text-sm mb-1">
+              Plano <span className="font-medium">{current!.plan === 'annual' ? 'Anual' : 'Mensal'}</span> — {BRL(current!.value)}{cycleLabel(current!.cycle)}
+            </p>
+            {current!.status === 'TRIALING' && (
+              <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
+                Teste grátis ativo. 1ª cobrança em {fmtDate(current!.trialEndsAt ?? current!.currentDueDate)}.
+              </p>
+            )}
+            {current!.status === 'ACTIVE' && current!.currentDueDate && (
+              <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
+                Próxima cobrança em {fmtDate(current!.currentDueDate)}.
+              </p>
+            )}
+          </>
         )}
-        {current!.status === 'ACTIVE' && current!.currentDueDate && (
-          <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
-            Próxima cobrança em {fmtDate(current!.currentDueDate)}.
-          </p>
+
+        {!isComp && (
+          <div>
+            <button
+              onClick={handleCancel}
+              disabled={isPending}
+              className="text-xs px-3 py-2 rounded-lg border disabled:opacity-50"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-alert, #E24B4A)' }}
+            >
+              {isPending ? '...' : 'Cancelar assinatura'}
+            </button>
+          </div>
         )}
-        <div>
-          <button
-            onClick={handleCancel}
-            disabled={isPending}
-            className="text-xs px-3 py-2 rounded-lg border disabled:opacity-50"
-            style={{ borderColor: 'var(--color-border)', color: 'var(--color-alert, #E24B4A)' }}
-          >
-            {isPending ? '...' : 'Cancelar assinatura'}
-          </button>
-        </div>
         {error && <p className="text-xs mt-2" style={{ color: 'var(--color-alert, #E24B4A)' }}>{error}</p>}
       </div>
     )
