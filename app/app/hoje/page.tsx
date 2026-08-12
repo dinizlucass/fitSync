@@ -6,6 +6,7 @@ import { ptBR } from 'date-fns/locale'
 import Link from 'next/link'
 import { dayRange } from '@/lib/coach/shared'
 import { sendWelcomeEmail } from '@/lib/email'
+import { OnboardingChecklist, type OnboardingStep } from '@/components/app/OnboardingChecklist'
 
 export default async function HojePage() {
   const supabase = await createClient()
@@ -128,6 +129,83 @@ export default async function HojePage() {
 
   const allDoneToday = workouts.length > 0 && !suggestedWorkout
 
+  // ── Onboarding checklist ───────────────────────────────────────────────────
+  // Cardápio salvo (dieta montada)? Conta refeições do template do usuário.
+  const dietTemplate = await prisma.dietTemplate.findUnique({
+    where: { userId: dbUser.id },
+    include: { _count: { select: { meals: true } } },
+  }).catch(() => null)
+
+  const iconStroke = { fill: 'none' as const, stroke: 'currentColor', strokeWidth: 2 }
+  const onboardingSteps: OnboardingStep[] = [
+    {
+      id: 'metas',
+      title: 'Definir suas metas',
+      description: 'Calorias e macros do seu objetivo',
+      href: '/app/configuracoes/metas',
+      cta: 'Definir',
+      done: profile.calorieGoal != null,
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" {...iconStroke}>
+          <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />
+        </svg>
+      ),
+    },
+    {
+      id: 'treino',
+      title: 'Criar seu treino com IA',
+      description: 'Programa personalizado em segundos',
+      href: '/app/treino/novo',
+      cta: 'Criar',
+      done: workouts.length > 0,
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" {...iconStroke}>
+          <path d="M18 20V10M12 20V4M6 20v-6" />
+        </svg>
+      ),
+    },
+    {
+      id: 'dieta',
+      title: 'Montar sua dieta',
+      description: 'Cardápio que bate suas metas',
+      href: '/app/dieta',
+      cta: 'Montar',
+      done: (dietTemplate?._count.meals ?? 0) > 0,
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" {...iconStroke}>
+          <path d="M3 11h18M4 11a8 8 0 0 0 16 0M12 3v2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+    },
+    {
+      id: 'whatsapp',
+      title: 'Conectar o WhatsApp',
+      description: 'Registre treino e dieta pelo Sync 🤖',
+      href: '/app/configuracoes',
+      cta: 'Conectar',
+      done: !!dbUser.phone,
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" {...iconStroke}>
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+    },
+    {
+      id: 'peso',
+      title: 'Registrar seu peso inicial',
+      description: 'Ponto de partida pra acompanhar evolução',
+      href: '/app/progresso',
+      cta: 'Registrar',
+      done: latestWeight != null,
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" {...iconStroke}>
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" />
+        </svg>
+      ),
+    },
+  ]
+  const onboardingComplete = onboardingSteps.every((s) => s.done)
+
   // Days since last session for suggested workout
   function daysSince(date: Date | undefined): string {
     if (!date) return 'Nunca realizado'
@@ -166,6 +244,8 @@ export default async function HojePage() {
         </h1>
         <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{formattedDateCap}</p>
       </div>
+
+      {!onboardingComplete && <OnboardingChecklist steps={onboardingSteps} />}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Calorie ring card */}
