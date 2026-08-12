@@ -27,6 +27,10 @@ export async function sendEmail({ to, subject, html }: SendEmailParams): Promise
     return false
   }
 
+  // Reply-To: o domínio no Resend só ENVIA (não tem caixa de entrada). Sem isto,
+  // respostas vão pra contato@fitsync.app.br e se perdem. Aponta para uma caixa real.
+  const replyTo = process.env.EMAIL_REPLY_TO
+
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -39,6 +43,7 @@ export async function sendEmail({ to, subject, html }: SendEmailParams): Promise
         to: [to],
         subject,
         html,
+        ...(replyTo ? { reply_to: replyTo } : {}),
       }),
       signal: AbortSignal.timeout(8000),
     })
