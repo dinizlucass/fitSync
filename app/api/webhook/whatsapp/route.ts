@@ -6,6 +6,7 @@ import { analyzeFoodImage } from '@/lib/openai'
 import { runCoach } from '@/lib/coach/coach'
 import { dayRange } from '@/lib/coach/shared'
 import { checkCoachRateLimit } from '@/lib/coach/rate-limit'
+import { enforceRateLimit, once, release } from '@/lib/ratelimit'
 import { reportError } from '@/lib/monitoring'
 
 /**
@@ -41,6 +42,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Fora do try pra o catch conseguir liberar a idempotência em caso de erro.
+  let messageId: string | undefined
   try {
     const rawBody = await request.text()
 
@@ -62,12 +65,27 @@ export async function POST(request: NextRequest) {
     const from = message.from as string
     const messageType = message.type as string
 
+    // Idempotência — a Meta reentrega a mesma mensagem quando não recebe 200 a
+    // tempo. Sem dedupe, a reentrega custaria outra chamada de IA e registraria
+    // a refeição/treino em dobro. `release()` no catch permite reprocessar se der erro.
+    messageId = message.id as string | undefined
+    if (messageId && !(await once('wa', messageId))) {
+      return Response.json({ status: 'duplicate' })
+    }
+
     // ── Vinculação de número por código (Configurações → WhatsApp) ─────────
     // Roda ANTES do lookup por telefone: o remetente ainda não está vinculado.
     // O número gravado é o `from` real informado pela Meta — prova de posse.
     if (messageType === 'text') {
       const codeMatch = (message.text?.body as string | undefined)?.match(/^\s*FIT[-\s]?(\d{6})\s*$/i)
       if (codeMatch) {
+        // Barra força-bruta de código por remetente (sequestro de vínculo).
+        const attempt = await enforceRateLimit('phone:attempt', from)
+        if (!attempt.allowed) {
+          await sendWhatsAppMessage(from, attempt.message ?? 'Muitas tentativas. Aguarde e tente de novo.')
+          return Response.json({ status: 'rate_limited' })
+        }
+
         const code = `FIT-${codeMatch[1]}`
         const owner = await prisma.user.findFirst({
           where: { phoneVerifyCode: code, phoneVerifyExpiresAt: { gte: new Date() } },
@@ -220,6 +238,8 @@ export async function POST(request: NextRequest) {
 
     return Response.json({ status: 'ok' })
   } catch (e) {
+    // Libera a marca de idempotência pra a Meta poder reentregar e reprocessar.
+    if (messageId) await release('wa', messageId)
     reportError('whatsapp:webhook', e)
     return Response.json({ status: 'error' }, { status: 500 })
   }

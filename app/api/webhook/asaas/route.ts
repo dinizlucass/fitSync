@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { once, release } from '@/lib/ratelimit'
 import { reportError } from '@/lib/monitoring'
 
 /**
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
   }
 
   let body: {
+    id?: string
     event?: string
     payment?: {
       id: string
@@ -76,6 +78,14 @@ export async function POST(request: NextRequest) {
 
   if (!sub) return Response.json({ status: 'subscription_not_found' })
 
+  // Idempotência — o Asaas reentrega o evento quando não recebe 200 a tempo.
+  // Sem dedupe, uma reentrega pode reaplicar a transição de status. Usa o id do
+  // evento (fallback: evento + pagamento). `release()` no catch permite reentrega.
+  const eventKey = body.id ?? `${event}:${payment.id}`
+  if (!(await once('asaas', eventKey))) {
+    return Response.json({ status: 'duplicate' })
+  }
+
   // PAYMENT_CREATED numa assinatura PENDENTE = checkout concluído, cartão salvo.
   // Só há trial (→ TRIALING, libera acesso antes de pagar) quando trialEndsAt existe —
   // ex.: plano mensal. No anual (sem trial) a cobrança é criada mas ainda não paga:
@@ -99,6 +109,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (e) {
+    await release('asaas', eventKey) // permite o Asaas reentregar e reprocessar
     reportError('asaas:webhook', e, { event, subscription: payment.subscription })
     return Response.json({ status: 'error' }, { status: 500 })
   }

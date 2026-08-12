@@ -1,15 +1,34 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { enforceRateLimit } from '@/lib/ratelimit'
 
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
   // Resgate de OAuth: se o ?code= cair na raiz (fallback do Supabase quando a
   // redirect URL não está na allowlist), encaminha pro handler que troca o
   // code por sessão — o login funciona mesmo com a allowlist mal configurada.
-  if (request.nextUrl.pathname === '/' && request.nextUrl.searchParams.has('code')) {
+  if (pathname === '/' && request.nextUrl.searchParams.has('code')) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/callback'
     url.searchParams.set('next', '/app/hoje')
     return NextResponse.redirect(url)
+  }
+
+  // Escudo global por IP em rotas sensíveis: login e /api (menos webhooks, que
+  // são Meta/Asaas e têm HMAC/token + idempotência). Fail-open se o Redis cair.
+  if (pathname === '/login' || (pathname.startsWith('/api/') && !pathname.startsWith('/api/webhook'))) {
+    const ip =
+      request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+      request.headers.get('x-real-ip') ||
+      'unknown'
+    const rl = await enforceRateLimit('ip:sensitive', ip)
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: rl.message },
+        { status: 429, headers: rl.retryAfterSec ? { 'Retry-After': String(rl.retryAfterSec) } : undefined },
+      )
+    }
   }
 
   let supabaseResponse = NextResponse.next({ request })
@@ -36,7 +55,6 @@ export async function proxy(request: NextRequest) {
   )
 
   const { data: { user } } = await supabase.auth.getUser()
-  const { pathname } = request.nextUrl
 
   if (user && pathname === '/login') {
     const url = request.nextUrl.clone()

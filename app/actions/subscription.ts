@@ -10,6 +10,7 @@ import {
   CHECKOUT_BILLING_TYPES, CHECKOUT_EXPIRES_MIN, appPublicUrl,
 } from '@/lib/asaas/config'
 import { createAsaasCheckout, cancelAsaasSubscription } from '@/lib/asaas/client'
+import { enforceRateLimit } from '@/lib/ratelimit'
 
 /** Data de vencimento inicial (hoje + dias de trial) em yyyy-MM-dd, ancorada ao meio-dia. */
 function nextDueDateISO(trialDays: number): string {
@@ -41,6 +42,10 @@ export async function startCheckout(params: {
   if (existing && ACTIVE_STATUSES.includes(existing.status as never)) {
     return { alreadyActive: true }
   }
+
+  // Anti-spam de checkout (evita lixo PENDING e abuso da API do Asaas).
+  const rl = await enforceRateLimit('checkout', dbUser.id)
+  if (!rl.allowed) return { error: rl.message }
 
   try {
     const nextDueDate = nextDueDateISO(plan.trialDays)

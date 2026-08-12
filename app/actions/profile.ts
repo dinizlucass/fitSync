@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateTDEE, calculateMacros } from '@/lib/calculations'
 import { revalidatePath } from 'next/cache'
 import { sendWelcomeEmail } from '@/lib/email'
+import { enforceRateLimit } from '@/lib/ratelimit'
 import { SUBSCRIPTION_ENFORCED, ACTIVE_STATUSES } from '@/lib/asaas/config'
 
 type GoalType = 'GAIN_MUSCLE' | 'LOSE_FAT' | 'RECOMPOSITION' | 'MAINTAIN'
@@ -133,6 +134,9 @@ export async function startPhoneVerification(): Promise<{
 
   const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
   if (!dbUser) return { error: 'Usuário não encontrado' }
+
+  const rl = await enforceRateLimit('phone:generate', dbUser.id)
+  if (!rl.allowed) return { error: rl.message }
 
   const { randomInt } = await import('crypto')
   const code = `FIT-${randomInt(100000, 1000000)}`
