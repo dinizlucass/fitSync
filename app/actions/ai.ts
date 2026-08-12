@@ -13,6 +13,7 @@ import {
   type ProgramContext,
 } from '@/lib/openai'
 import { runCoach } from '@/lib/coach/coach'
+import { enforceRateLimit } from '@/lib/ratelimit'
 import { reportError } from '@/lib/monitoring'
 import { WORKOUT_METHODS } from '@/lib/workout-methods'
 import type { SmartDietPlan, MealVariant } from '@/lib/diet-types'
@@ -76,6 +77,10 @@ export async function generateProgramAction(
 
   const method = WORKOUT_METHODS.find(m => m.id === params.methodId)
   if (!method) return { error: 'Método inválido' }
+
+  // Rate limit — gerar programa dispara 1 + N chamadas gpt-4o (a ação mais cara).
+  const rl = await enforceRateLimit('ai:generate:treino', dbUser.id)
+  if (!rl.allowed) return { error: rl.message }
 
   const ctx: ProgramContext = {
     methodName: method.name,
@@ -198,6 +203,10 @@ export async function generateDietPlanAction(params: {
     return { error: 'Configure suas metas primeiro em Configurações → Metas.' }
   }
 
+  // Rate limit — geração de cardápio (gpt-4o), bucket próprio (separado do treino).
+  const rl = await enforceRateLimit('ai:generate:dieta', dbUser.id)
+  if (!rl.allowed) return { error: rl.message }
+
   const goalLabels: Record<string, string> = {
     GAIN_MUSCLE: 'Ganho de massa muscular',
     LOSE_FAT: 'Perda de gordura',
@@ -236,6 +245,9 @@ export async function refineMealVariantAction(params: {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
 
+  const rl = await enforceRateLimit('ai:refine', user.id)
+  if (!rl.allowed) return { error: rl.message }
+
   try {
     const newVariant = await refineMealVariant(params)
     return { newVariant }
@@ -257,6 +269,9 @@ export async function refineExerciseAction(params: {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
+
+  const rl = await enforceRateLimit('ai:refine', user.id)
+  if (!rl.allowed) return { error: rl.message }
 
   try {
     const newExercise = await refineExercise(params)

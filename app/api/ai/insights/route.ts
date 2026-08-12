@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { generateWeeklyInsight } from '@/lib/openai'
+import { enforceRateLimit } from '@/lib/ratelimit'
 import { startOfDay } from 'date-fns'
 import { saoPauloDateStr } from '@/lib/coach/shared'
 
@@ -16,6 +17,12 @@ export async function GET(_request: NextRequest) {
   const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
   if (!dbUser) {
     return Response.json({ error: 'Usuário não encontrado' }, { status: 404 })
+  }
+
+  // Rate limit — insight semanal (gpt-4o) dispara ao abrir a tela de progresso.
+  const rl = await enforceRateLimit('ai:insight', dbUser.id)
+  if (!rl.allowed) {
+    return Response.json({ error: rl.message }, { status: 429 })
   }
 
   const sevenDaysAgo = startOfDay(new Date())

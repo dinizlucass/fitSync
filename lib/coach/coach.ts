@@ -12,6 +12,7 @@ import { COACH_SYSTEM_PROMPT } from '@/lib/coach/prompt'
 import { buildUserContext, formatUserContext } from '@/lib/coach/context'
 import { TOOL_DEFINITIONS, executeTool } from '@/lib/coach/tools'
 import { checkCoachRateLimit } from '@/lib/coach/rate-limit'
+import { enforceRateLimit } from '@/lib/ratelimit'
 import { reportError } from '@/lib/monitoring'
 
 const COACH_MODEL = 'gpt-4.1-mini'
@@ -27,6 +28,12 @@ export interface RunCoachParams {
 export async function runCoach({ userId, message, channel = 'whatsapp' }: RunCoachParams): Promise<string> {
   // 0. Rate limit — protege o custo de OpenAI. Mensagem bloqueada não chama a
   // LLM e não entra na memória.
+  // 0a. Rajada via Redis (preciso, sem tocar o banco). Fail-open se Upstash off.
+  const burst = await enforceRateLimit('ai:coach', userId)
+  if (!burst.allowed) {
+    return burst.message ?? 'Limite de mensagens atingido. Tenta de novo mais tarde.'
+  }
+  // 0b. Teto por banco (conta chat_messages; fail-open se a tabela não existir).
   const limit = await checkCoachRateLimit(userId)
   if (!limit.allowed) {
     return limit.message ?? 'Limite de mensagens atingido. Tenta de novo mais tarde.'
