@@ -1,0 +1,25 @@
+<!-- Supabase → Authentication → Email Templates → "Change Email Address"
+     Subject: Confirme seu novo e-mail — FitSync -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"/></head>
+<body style="margin:0;padding:0;background-color:#F5F5F0;font-family:Inter,Arial,sans-serif;">
+  <div style="max-width:480px;margin:0 auto;padding:32px 16px;">
+    <div style="text-align:center;margin-bottom:24px;">
+      <span style="font-size:22px;font-weight:600;color:#111111;">Fit<span style="color:#1D9E75;">Sync</span></span>
+    </div>
+    <div style="background:#ffffff;border-radius:12px;padding:28px;color:#111111;font-size:14px;line-height:1.6;">
+      <h2 style="margin:0 0 12px;font-size:18px;">Confirme seu novo e-mail</h2>
+      <p>Você pediu para alterar o e-mail da sua conta <strong>FitSync</strong>. Confirme abaixo para concluir a mudança:</p>
+      <div style="text-align:center;margin:20px 0;">
+        <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#1D9E75;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:500;font-size:14px;">Confirmar novo e-mail</a>
+      </div>
+      <p style="font-size:12px;color:#666;">Se não foi você quem pediu, ignore este e-mail e sua conta continua com o e-mail atual.</p>
+    </div>
+    <p style="text-align:center;font-size:11px;color:#999999;margin-top:16px;">
+      FitSync — seu consultor de treino e dieta, direto no bolso.<br/>
+      <a href="https://www.fitsync.app.br" style="color:#1D9E75;">www.fitsync.app.br</a>
+    </p>
+  </div>
+</body>
+</html>
