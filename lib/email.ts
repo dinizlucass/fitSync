@@ -115,3 +115,82 @@ export function sendAccountCreatedEmail(to: string, setPasswordLink: string, nam
     `),
   })
 }
+
+// ─── Billing (disparados pelo webhook do Asaas nas transições de status) ───
+
+const brl = (v: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+
+const dateBR = (d?: Date | null) =>
+  d ? new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'long', year: 'numeric' }).format(d) : null
+
+/** Trial iniciado — cartão salvo, acesso liberado antes da 1ª cobrança. */
+export function sendTrialStartedEmail(to: string, name?: string | null, trialEndsAt?: Date | null): Promise<boolean> {
+  const firstName = name?.split(' ')[0]
+  const endStr = dateBR(trialEndsAt)
+  return sendEmail({
+    to,
+    subject: 'Seu teste grátis do FitSync começou 🎉',
+    html: layout(`
+      <h2 style="margin:0 0 12px;font-size:18px;">Tudo certo${firstName ? `, ${firstName}` : ''}! 🎉</h2>
+      <p>Seu <strong>teste grátis de 7 dias</strong> está ativo — acesso completo ao app, à geração de treino e dieta por IA e ao coach no WhatsApp.</p>
+      ${endStr ? `<p>Sua primeira cobrança só acontece em <strong>${endStr}</strong>. Antes disso, você pode cancelar quando quiser, sem custo.</p>` : ''}
+      <div style="text-align:center;margin-top:20px;">${button(`${appUrl()}/app/hoje`, 'Começar agora')}</div>
+    `),
+  })
+}
+
+/** Pagamento confirmado — assinatura ativa. */
+export function sendPaymentConfirmedEmail(
+  to: string,
+  params: { name?: string | null; planName: string; value: number; nextDueDate?: Date | null }
+): Promise<boolean> {
+  const firstName = params.name?.split(' ')[0]
+  const nextStr = dateBR(params.nextDueDate)
+  return sendEmail({
+    to,
+    subject: 'Pagamento confirmado — bem-vindo ao FitSync Premium ✅',
+    html: layout(`
+      <h2 style="margin:0 0 12px;font-size:18px;">Pagamento confirmado${firstName ? `, ${firstName}` : ''}! ✅</h2>
+      <p>Sua assinatura <strong>FitSync Premium</strong> está ativa. Obrigado por fazer parte!</p>
+      <table style="width:100%;font-size:14px;margin:16px 0;border-collapse:collapse;">
+        <tr><td style="padding:6px 0;color:#666;">Plano</td><td style="padding:6px 0;text-align:right;font-weight:500;">${params.planName}</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">Valor</td><td style="padding:6px 0;text-align:right;font-weight:500;">${brl(params.value)}</td></tr>
+        ${nextStr ? `<tr><td style="padding:6px 0;color:#666;">Próxima cobrança</td><td style="padding:6px 0;text-align:right;font-weight:500;">${nextStr}</td></tr>` : ''}
+      </table>
+      <div style="text-align:center;margin-top:20px;">${button(`${appUrl()}/app/hoje`, 'Ir para o app')}</div>
+      <p style="font-size:12px;color:#666;margin-top:16px;">Precisa de nota fiscal ou tem alguma dúvida? Responda este e-mail.</p>
+    `),
+  })
+}
+
+/** Pagamento não processado — assinatura em atraso, com link para regularizar. */
+export function sendPaymentFailedEmail(to: string, name?: string | null): Promise<boolean> {
+  const firstName = name?.split(' ')[0]
+  return sendEmail({
+    to,
+    subject: 'Não conseguimos processar seu pagamento — FitSync',
+    html: layout(`
+      <h2 style="margin:0 0 12px;font-size:18px;">Ops${firstName ? `, ${firstName}` : ''}, tivemos um problema com o pagamento</h2>
+      <p>Não conseguimos processar a cobrança da sua assinatura. Isso costuma ser um cartão vencido, sem limite ou bloqueado pelo banco.</p>
+      <p>Regularize em poucos cliques para não perder o acesso:</p>
+      <div style="text-align:center;margin:20px 0;">${button(`${appUrl()}/app/assinatura`, 'Atualizar pagamento')}</div>
+      <p style="font-size:12px;color:#666;">Se já resolveu, pode ignorar este e-mail.</p>
+    `),
+  })
+}
+
+/** Assinatura cancelada — confirmação + porta aberta para voltar. */
+export function sendSubscriptionCanceledEmail(to: string, name?: string | null): Promise<boolean> {
+  const firstName = name?.split(' ')[0]
+  return sendEmail({
+    to,
+    subject: 'Sua assinatura do FitSync foi cancelada',
+    html: layout(`
+      <h2 style="margin:0 0 12px;font-size:18px;">Assinatura cancelada${firstName ? `, ${firstName}` : ''}</h2>
+      <p>Confirmamos o cancelamento da sua assinatura do FitSync. Você não será mais cobrado.</p>
+      <p>Seus dados de treino e dieta continuam salvos. Se um dia quiser voltar, é só reativar — a gente continua de onde você parou. 💪</p>
+      <div style="text-align:center;margin-top:20px;">${button(`${appUrl()}/app/assinatura`, 'Reativar assinatura')}</div>
+    `),
+  })
+}

@@ -1,6 +1,12 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { once, release } from '@/lib/ratelimit'
+import {
+  sendTrialStartedEmail,
+  sendPaymentConfirmedEmail,
+  sendPaymentFailedEmail,
+  sendSubscriptionCanceledEmail,
+} from '@/lib/email'
 import { reportError } from '@/lib/monitoring'
 
 /**
@@ -112,6 +118,33 @@ export async function POST(request: NextRequest) {
     await release('asaas', eventKey) // permite o Asaas reentregar e reprocessar
     reportError('asaas:webhook', e, { event, subscription: payment.subscription })
     return Response.json({ status: 'error' }, { status: 500 })
+  }
+
+  // E-mail transacional SÓ na transição de status (sub.status é o valor ANTERIOR).
+  // Fire-and-forget: falha de e-mail nunca derruba o webhook.
+  if (newStatus && newStatus !== sub.status) {
+    const u = await prisma.user
+      .findUnique({ where: { id: sub.userId }, select: { email: true, name: true } })
+      .catch(() => null)
+
+    if (u?.email) {
+      const nextDue = payment.dueDate ? new Date(payment.dueDate + 'T12:00:00') : sub.currentDueDate
+      const planName = sub.plan === 'annual' ? 'Anual' : 'Mensal'
+      switch (newStatus) {
+        case 'TRIALING':
+          void sendTrialStartedEmail(u.email, u.name, sub.trialEndsAt)
+          break
+        case 'ACTIVE':
+          void sendPaymentConfirmedEmail(u.email, { name: u.name, planName, value: sub.value, nextDueDate: nextDue })
+          break
+        case 'PAST_DUE':
+          void sendPaymentFailedEmail(u.email, u.name)
+          break
+        case 'CANCELED':
+          void sendSubscriptionCanceledEmail(u.email, u.name)
+          break
+      }
+    }
   }
 
   return Response.json({ status: 'ok' })
