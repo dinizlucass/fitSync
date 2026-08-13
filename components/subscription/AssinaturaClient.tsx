@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { startCheckout, cancelMySubscription, getMySubscription, type MySubscription } from '@/app/actions/subscription'
+import { trackPixel } from '@/lib/analytics/pixel'
 
 interface PlanView {
   id: string
@@ -67,6 +68,8 @@ export default function AssinaturaClient({
         const sub = await getMySubscription()
         if (sub && (sub.status === 'TRIALING' || sub.status === 'ACTIVE')) {
           clearInterval(timer)
+          // conversão confirmada: trial iniciado / assinatura ativa
+          trackPixel(sub.status === 'TRIALING' ? 'StartTrial' : 'Subscribe', { currency: 'BRL' })
           router.refresh()
         } else if (tries >= 8) {
           clearInterval(timer)
@@ -82,7 +85,12 @@ export default function AssinaturaClient({
     startTransition(async () => {
       const res = await startCheckout({ planId: selected })
       if (res.error) { setError(res.error); return }
-      if (res.checkoutUrl) { window.location.href = res.checkoutUrl; return }
+      if (res.checkoutUrl) {
+        const plan = plans.find((p) => p.id === selected)
+        trackPixel('InitiateCheckout', { currency: 'BRL', value: plan?.value })
+        window.location.href = res.checkoutUrl
+        return
+      }
       if (res.alreadyActive) { router.refresh(); return }
       router.refresh()
     })

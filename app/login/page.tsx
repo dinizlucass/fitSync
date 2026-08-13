@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { trackPixel } from '@/lib/analytics/pixel'
 
 type Tab = 'login' | 'signup' | 'forgot'
 
@@ -80,13 +81,16 @@ export default function LoginPage() {
       })
       if (error) {
         setError(traduzirErroAuth(error.message))
-      } else if (data.session) {
-        // Autoconfirmação ligada: já saiu logado — entra direto no onboarding
-        router.push('/app/hoje')
-        router.refresh()
       } else {
-        // Confirmação por e-mail exigida (caso a config mude no Supabase)
-        setMessage('Conta criada! Verifique seu email para confirmar o cadastro.')
+        trackPixel('CompleteRegistration') // conversão: cadastro concluído
+        if (data.session) {
+          // Autoconfirmação ligada: já saiu logado — entra direto no onboarding
+          router.push('/app/hoje')
+          router.refresh()
+        } else {
+          // Confirmação por e-mail exigida (caso a config mude no Supabase)
+          setMessage('Conta criada! Verifique seu email para confirmar o cadastro.')
+        }
       }
     }
 
