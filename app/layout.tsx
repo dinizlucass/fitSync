@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { MetaPixel } from '@/components/analytics/MetaPixel'
+import { Clarity } from '@/components/analytics/Clarity'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -31,6 +32,7 @@ export default function RootLayout({
     <html lang="pt-BR" className={`h-full ${inter.variable}`}>
       <body className="min-h-full flex flex-col antialiased">
         <MetaPixel />
+        <Clarity />
         {children}
       </body>
     </html>
