@@ -4,7 +4,9 @@ import Script from 'next/script'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef } from 'react'
 
-const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID
+// ID público do Pixel (fica visível no client de qualquer forma). Pode ser
+// sobrescrito por NEXT_PUBLIC_META_PIXEL_ID sem tocar no código.
+const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID ?? '1659563822223017'
 
 /**
  * Meta Pixel base + PageView. Env-gated: sem NEXT_PUBLIC_META_PIXEL_ID não
