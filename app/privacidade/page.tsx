@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: 'Como o FitSync coleta, usa e protege seus dados pessoais (LGPD).',
 }
 
-const ATUALIZACAO = '4 de julho de 2026'
+const ATUALIZACAO = '12 de agosto de 2026'
 
 function H2({ children }: { children: React.ReactNode }) {
   return <h2 className="text-base font-medium mt-8 mb-3">{children}</h2>
@@ -40,6 +40,7 @@ export default function PrivacidadePage() {
           <LI><strong>WhatsApp:</strong> número de telefone vinculado e o conteúdo das mensagens e fotos que você envia ao assistente.</LI>
           <LI><strong>Dados de saúde e hábitos (dados sensíveis):</strong> peso, altura, data de nascimento, sexo, objetivo físico, nível de atividade, refeições registradas, fotos de refeições, treinos, cargas e evolução corporal.</LI>
           <LI><strong>Uso técnico:</strong> registros de acesso (logs), identificadores de sessão (cookies essenciais) e dados necessários à segurança e ao funcionamento do Serviço.</LI>
+          <LI><strong>Navegação e marketing:</strong> páginas visitadas, cliques, rolagem e gravações anônimas de sessão (para melhorar a usabilidade), além de eventos de conversão e interação com anúncios, coletados por ferramentas de análise e publicidade (ver seções 4 e 8).</LI>
         </ul>
 
         <H2>2. Para que usamos os dados</H2>
@@ -49,6 +50,7 @@ export default function PrivacidadePage() {
           <LI>Processar pagamentos e prevenir fraudes (execução de contrato e obrigação legal).</LI>
           <LI>Enviar e-mails transacionais (boas-vindas, redefinição de senha, avisos de cobrança) e comunicações sobre o Serviço.</LI>
           <LI>Garantir segurança, prevenir abusos e melhorar o Serviço (legítimo interesse — art. 7º, IX, sempre com o mínimo de dados necessário).</LI>
+          <LI>Medir a usabilidade do site e a eficácia das nossas campanhas de marketing, por meio de ferramentas de análise e publicidade que usam cookies e identificadores (legítimo interesse — art. 7º, IX; ver seções 4 e 8). Esses dados não incluem seus dados de saúde.</LI>
         </ul>
 
         <H2>3. Inteligência artificial</H2>
@@ -67,6 +69,8 @@ export default function PrivacidadePage() {
           <LI><strong>Meta Platforms (WhatsApp Business)</strong> — envio e recebimento das mensagens do assistente.</LI>
           <LI><strong>Asaas</strong> — processamento de pagamentos e emissão de cobranças.</LI>
           <LI><strong>Resend</strong> — envio de e-mails transacionais.</LI>
+          <LI><strong>Microsoft (Clarity)</strong> — análise de uso, mapas de calor e gravações anônimas de sessão para melhorar a experiência.</LI>
+          <LI><strong>Meta Platforms (Pixel / Ads)</strong> — mensuração de conversões e otimização das nossas campanhas de anúncios.</LI>
         </ul>
         <P>
           Alguns desses provedores estão localizados fora do Brasil (ex.: Estados Unidos), o que caracteriza
@@ -100,10 +104,17 @@ export default function PrivacidadePage() {
           de incidente relevante, comunicaremos você e a ANPD conforme a lei.
         </P>
 
-        <H2>8. Cookies</H2>
+        <H2>8. Cookies e tecnologias de rastreamento</H2>
+        <P>Utilizamos três categorias de cookies e identificadores:</P>
+        <ul className="list-disc pl-5 mb-3">
+          <LI><strong>Essenciais:</strong> autenticação e sessão, necessários para manter você conectado.</LI>
+          <LI><strong>Análise:</strong> o Microsoft Clarity registra, de forma anônima, como o site é usado (páginas, cliques, rolagem e gravações de sessão) para melhorarmos a experiência.</LI>
+          <LI><strong>Publicidade e mensuração:</strong> o Meta Pixel mede conversões (como cadastros) e ajuda a otimizar nossas campanhas de anúncios.</LI>
+        </ul>
         <P>
-          Utilizamos apenas cookies essenciais de autenticação e sessão, necessários para manter você conectado.
-          Não utilizamos cookies de publicidade.
+          As categorias de análise e publicidade são carregadas com base no nosso legítimo interesse. Você pode
+          bloqueá-las ou removê-las a qualquer momento nas configurações do seu navegador, sem prejuízo do acesso
+          às funcionalidades essenciais do Serviço. Esses provedores podem tratar dados fora do Brasil (ver seção 4).
         </P>
 
         <H2>9. Crianças e adolescentes</H2>
