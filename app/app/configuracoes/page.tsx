@@ -19,6 +19,10 @@ export default async function ConfiguracoesPage() {
 
   if (!dbUser) redirect('/app/dieta')
 
+  // Conta Google-only (sem provider 'email') não tem senha → esconde o card de senha.
+  const providers = (user.app_metadata?.providers as string[] | undefined) ?? []
+  const canSetPassword = providers.length === 0 || providers.includes('email')
+
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto">
       <h1 className="text-xl font-medium mb-6">Configurações</h1>
@@ -89,7 +93,7 @@ export default async function ConfiguracoesPage() {
           </svg>
         </Link>
         <WhatsAppConnect initialPhone={dbUser.phone} />
-        <ChangePassword />
+        <ChangePassword canSetPassword={canSetPassword} />
         {isAdminEmail(user.email) && (
           <Link href="/app/admin" className="flex items-center justify-between p-4 border-t transition-colors hover:bg-gray-50 dark:hover:bg-gray-900" style={{ borderColor: 'var(--color-border)' }}>
             <div className="flex items-center gap-3">

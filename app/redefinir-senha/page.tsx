@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { validatePassword, PASSWORD_RULES } from '@/lib/auth/password'
 
 export default function RedefinirSenhaPage() {
   const router = useRouter()
@@ -43,7 +44,8 @@ export default function RedefinirSenhaPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (password.length < 6) { setError('A senha deve ter no mínimo 6 caracteres.'); return }
+    const pwErr = validatePassword(password)
+    if (pwErr) { setError(pwErr); return }
     if (password !== confirm) { setError('As senhas não coincidem.'); return }
 
     setLoading(true)
@@ -98,13 +100,14 @@ export default function RedefinirSenhaPage() {
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Nova senha"
                   required
-                  minLength={6}
+                  minLength={8}
                   autoFocus
                   className="w-full text-sm px-3 py-2.5 rounded-lg border outline-none"
                   style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)' }}
                 />
+                <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-muted)' }}>{PASSWORD_RULES}</p>
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1.5">Confirmar nova senha</label>
@@ -114,7 +117,7 @@ export default function RedefinirSenhaPage() {
                   onChange={e => setConfirm(e.target.value)}
                   placeholder="Repita a senha"
                   required
-                  minLength={6}
+                  minLength={8}
                   className="w-full text-sm px-3 py-2.5 rounded-lg border outline-none"
                   style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)' }}
                 />

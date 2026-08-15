@@ -1,0 +1,27 @@
+<!-- Supabase → Authentication → Email Templates → "Confirm signup"
+     Subject: Seu código de confirmação — FitSync
+     Este template é a versão de CÓDIGO (usa {{ .Token }}), para o fluxo de
+     verificação por código no app. Requer "Confirm email" LIGADO no Supabase. -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"/></head>
+<body style="margin:0;padding:0;background-color:#F5F5F0;font-family:Inter,Arial,sans-serif;">
+  <div style="max-width:480px;margin:0 auto;padding:32px 16px;">
+    <div style="text-align:center;margin-bottom:24px;">
+      <span style="font-size:22px;font-weight:600;color:#111111;">Fit<span style="color:#1D9E75;">Sync</span></span>
+    </div>
+    <div style="background:#ffffff;border-radius:12px;padding:28px;color:#111111;font-size:14px;line-height:1.6;">
+      <h2 style="margin:0 0 12px;font-size:18px;">Confirme seu e-mail</h2>
+      <p>Use o código abaixo para ativar sua conta <strong>FitSync</strong> e começar seus 7 dias grátis:</p>
+      <div style="text-align:center;margin:24px 0;">
+        <span style="display:inline-block;font-size:34px;font-weight:700;letter-spacing:10px;color:#1D9E75;background:#E1F5EE;border-radius:12px;padding:16px 24px;">{{ .Token }}</span>
+      </div>
+      <p style="font-size:12px;color:#666;">O código expira em 1 hora. Se você não criou uma conta no FitSync, pode ignorar este e-mail.</p>
+    </div>
+    <p style="text-align:center;font-size:11px;color:#999999;margin-top:16px;">
+      FitSync — seu consultor de treino e dieta, direto no bolso.<br/>
+      <a href="https://www.fitsync.app.br" style="color:#1D9E75;">www.fitsync.app.br</a>
+    </p>
+  </div>
+</body>
+</html>

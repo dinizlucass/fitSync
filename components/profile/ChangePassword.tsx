@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { validatePassword, PASSWORD_RULES } from '@/lib/auth/password'
 
-export default function ChangePassword() {
+export default function ChangePassword({ canSetPassword = true }: { canSetPassword?: boolean }) {
   const supabase = createClient()
   const [open, setOpen] = useState(false)
   const [password, setPassword] = useState('')
@@ -16,7 +17,8 @@ export default function ChangePassword() {
     e.preventDefault()
     setError(null)
     setSuccess(false)
-    if (password.length < 6) { setError('A senha deve ter no mínimo 6 caracteres.'); return }
+    const pwErr = validatePassword(password)
+    if (pwErr) { setError(pwErr); return }
     if (password !== confirm) { setError('As senhas não coincidem.'); return }
 
     setLoading(true)
@@ -36,6 +38,9 @@ export default function ChangePassword() {
     setConfirm('')
     setTimeout(() => { setSuccess(false); setOpen(false) }, 2500)
   }
+
+  // Contas Google não têm senha (login só pelo Google) — não mostra o card.
+  if (!canSetPassword) return null
 
   return (
     <div className="p-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
@@ -67,9 +72,9 @@ export default function ChangePassword() {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Nova senha (mín. 6)"
+              placeholder="Nova senha"
               required
-              minLength={6}
+              minLength={8}
               autoFocus
               className="text-sm px-3 py-2.5 rounded-lg border outline-none"
               style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)' }}
@@ -80,11 +85,12 @@ export default function ChangePassword() {
               onChange={e => setConfirm(e.target.value)}
               placeholder="Confirmar nova senha"
               required
-              minLength={6}
+              minLength={8}
               className="text-sm px-3 py-2.5 rounded-lg border outline-none"
               style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)' }}
             />
           </div>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{PASSWORD_RULES}</p>
           {error && <p className="text-xs" style={{ color: 'var(--color-alert, #E24B4A)' }}>{error}</p>}
           <button
             type="submit"

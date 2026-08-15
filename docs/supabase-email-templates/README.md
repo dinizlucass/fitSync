@@ -70,10 +70,28 @@ arquivo correspondente e ajuste o **Subject**:
 - O e-mail deve chegar de `contato@fitsync.app.br`, com a cara do FitSync, e o
   botão deve levar a `/redefinir-senha` logado na sessão de recovery.
 
+## 7. Verificação de cadastro por CÓDIGO (novo fluxo)
+
+O app agora tem um passo de "digite o código" no cadastro por e-mail. Para ativar:
+
+1. **Authentication → Providers → Email → ligar "Confirm email"** (desliga o
+   autoconfirm). Sem isso o signup entra direto e o passo de código não aparece.
+2. **Email Templates → "Confirm signup"** → use o arquivo **`confirm-signup-codigo.html`**
+   (mostra o `{{ .Token }}` de 6 dígitos), subject `Seu código de confirmação — FitSync`.
+   > Substitui o `confirm-signup.html` (link) enquanto o fluxo de código estiver ativo.
+3. O app chama `verifyOtp({ type: 'signup' })` com o código. Login pelo Google
+   **não** passa por isso (OAuth não envia código).
+
+## 8. Regras de senha (recomendado)
+
+**Authentication → Policies → Password** → mínimo **8 caracteres** + exigir
+**maiúscula e número**. O app já valida isso no client (`lib/auth/password.ts`);
+a policy no painel é a defesa server-side.
+
 ## Notas
 
-- **Autoconfirmação:** hoje o projeto está com `mailer_autoconfirm: true` — signup
-  não dispara o "Confirm signup". O template fica pronto caso você desligue o
-  autoconfirm no futuro.
 - **Convite de admin** (`adminCreateUser`) já manda o link via Resend por
   `lib/email.ts` (`sendAccountCreatedEmail`) — não usa o template do Supabase.
+- **Reset de senha:** o link agora aponta para `/auth/callback?next=/redefinir-senha`
+  (troca o code no servidor e cai na tela de senha). O Site URL + Redirect URLs já
+  cobrem `/auth/callback`.
