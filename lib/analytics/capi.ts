@@ -35,6 +35,8 @@ export interface CapiParams {
   /** Mesmo id do evento do Pixel client, quando houver, para deduplicação. */
   eventId?: string
   email?: string | null
+  /** Telefone em dígitos (com DDI). É hasheado antes do envio. */
+  phone?: string | null
   clientIp?: string | null
   userAgent?: string | null
   /** Cookies do navegador (_fbp / _fbc) melhoram o match, quando disponíveis. */
@@ -53,6 +55,8 @@ export async function sendCapiEvent(params: CapiParams): Promise<void> {
     const user_data: Record<string, unknown> = {}
     const em = sha256(params.email)
     if (em) user_data.em = [em]
+    const ph = sha256(params.phone ? params.phone.replace(/\D/g, '') : null)
+    if (ph) user_data.ph = [ph]
     if (params.clientIp) user_data.client_ip_address = params.clientIp
     if (params.userAgent) user_data.client_user_agent = params.userAgent
     if (params.fbp) user_data.fbp = params.fbp

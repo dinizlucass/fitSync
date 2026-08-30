@@ -77,6 +77,24 @@ model Subscription {
   @@map("subscriptions")
 }
 
+model QuizLead {
+  id          String   @id @default(cuid())
+  name        String
+  whatsapp    String
+  objective   String?
+  answers     Json
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  fbclid      String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("quiz_leads")
+}
+
 model ChatMessage {
   id        String   @id @default(cuid())
   userId    String

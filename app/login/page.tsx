@@ -45,6 +45,9 @@ export default function LoginPage() {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     if (params.get('tab') === 'signup') setTab('signup')
+    // Veio do quiz: já abre no cadastro com o nome preenchido
+    const nome = params.get('nome')
+    if (nome) { setTab('signup'); setName(nome) }
     if (params.get('error') === 'oauth') {
       setError('Não foi possível entrar com o Google. Tente novamente ou use e-mail e senha.')
       window.history.replaceState({}, '', '/login')

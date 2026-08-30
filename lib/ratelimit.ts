@@ -89,6 +89,15 @@ const BUCKETS = {
     limits: [{ tokens: 100, window: '1 m' }],
     message: 'Muitas requisições. Aguarde um instante.',
   },
+  // Envio de lead do quiz (por IP) — /quiz é público e recebe tráfego pago; barra
+  // spam/bot antes de gravar lead e disparar evento de conversão.
+  'quiz:lead': {
+    limits: [
+      { tokens: 5, window: '10 m' },
+      { tokens: 30, window: '1 d' },
+    ],
+    message: 'Muitos envios em pouco tempo. Aguarde alguns minutos e tente de novo.',
+  },
 } satisfies Record<string, BucketDef>
 
 export type RateLimitBucket = keyof typeof BUCKETS
