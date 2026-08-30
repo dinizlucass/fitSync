@@ -76,11 +76,14 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
         setError(traduzirErroAuth(error.message))
+        setLoading(false)
       } else {
+        // NÃO reseta o loading: mantém "Entrando..." até a navegação trocar a
+        // página (o /app/hoje é pesado e leva um tempo pra carregar). Se
+        // resetasse aqui, o botão voltava pra "Entrar" e parecia travado.
         router.push('/app/hoje')
         router.refresh()
       }
-      setLoading(false)
       return
     }
 
@@ -96,8 +99,10 @@ export default function LoginPage() {
     })
     if (error) {
       setError(traduzirErroAuth(error.message))
+      setLoading(false)
     } else if (data.session) {
-      // Autoconfirmação ligada: já saiu logado — cadastro concluído
+      // Autoconfirmação ligada: já saiu logado — cadastro concluído.
+      // Mantém o loading até a navegação (mesmo motivo do login acima).
       trackPixel('CompleteRegistration')
       router.push('/app/hoje')
       router.refresh()
@@ -105,8 +110,8 @@ export default function LoginPage() {
       // Confirmação exigida: o Supabase enviou um código — vai pro passo de verificação
       setPendingEmail(email)
       setMessage(null)
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   async function handleVerifyCode(e: React.FormEvent) {
@@ -120,13 +125,14 @@ export default function LoginPage() {
       token: code.trim(),
       type: 'signup',
     })
-    setLoading(false)
 
     if (error || !data.session) {
       setError('Código inválido ou expirado. Confira ou peça um novo.')
+      setLoading(false)
       return
     }
-    // Cadastro realmente concluído aqui (e-mail verificado)
+    // Cadastro realmente concluído aqui (e-mail verificado).
+    // Mantém o loading até a navegação trocar a página.
     trackPixel('CompleteRegistration')
     router.push('/app/hoje')
     router.refresh()
@@ -375,7 +381,9 @@ export default function LoginPage() {
                   className="w-full text-sm py-2.5 px-4 rounded-lg text-white font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
                   style={{ backgroundColor: 'var(--color-primary)' }}
                 >
-                  {loading ? 'Aguarde...' : tab === 'login' ? 'Entrar' : tab === 'signup' ? 'Começar 7 dias grátis' : 'Enviar link de redefinição'}
+                  {loading
+                    ? (tab === 'login' ? 'Entrando...' : tab === 'signup' ? 'Criando conta...' : 'Enviando...')
+                    : tab === 'login' ? 'Entrar' : tab === 'signup' ? 'Começar 7 dias grátis' : 'Enviar link de redefinição'}
                 </button>
 
                 {tab === 'signup' && (
