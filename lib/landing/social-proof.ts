@@ -16,15 +16,45 @@ export interface Testimonial {
 }
 
 /**
- * ⚠️ VAZIO de propósito. Enquanto estiver vazio, a seção de depoimentos NÃO
- * aparece na landing (nada falso vai ao ar). Assim que tiver depoimentos reais
- * de usuários, adicione-os aqui — a seção passa a aparecer automaticamente.
+ * Depoimentos reais de usuários (feedbacks recebidos). Para exibir o nome
+ * publicamente, tenha o ok da pessoa (LGPD) — dá para usar só o primeiro nome
+ * ou "Nome + inicial". A seção só aparece quando este array tem itens.
  *
- * Modelo (copie um objeto destes para dentro do array, com dados reais):
- *   { name: 'Rafael M.', tag: 'Ganhou 4 kg de massa em 8 semanas',
- *     quote: 'Só consegui seguir a dieta registrando tudo pelo WhatsApp. Mudou o jogo.' }
+ * Modelo:
+ *   { name: 'Rafael', tag: '31 anos', quote: 'Texto do depoimento...' }
  */
-export const TESTIMONIALS: Testimonial[] = []
+export const TESTIMONIALS: Testimonial[] = [
+  {
+    name: 'Mariana',
+    tag: '27 anos',
+    quote: 'Eu sempre começava uma dieta e desistia porque achava tudo complicado. No FitSync consigo mandar mensagem no WhatsApp, tirar uma dúvida e seguir meu dia. Parece que tenho alguém me ajudando de verdade.',
+  },
+  {
+    name: 'Rafael',
+    tag: '31 anos',
+    quote: 'O que mais gostei foi não receber aquele treino genérico. Informei que treinava em casa e só tinha alguns halteres, e ele montou tudo considerando isso. Ficou muito mais fácil manter a rotina.',
+  },
+  {
+    name: 'Camila',
+    tag: '24 anos',
+    quote: 'Eu não sabia se estava comendo pouco ou muito. Agora consigo acompanhar minhas calorias e ajustar as refeições sem precisar pesar absolutamente tudo. Estou bem mais consciente do que como.',
+  },
+  {
+    name: 'Lucas',
+    tag: '29 anos',
+    quote: 'Já tinha baixado vários aplicativos, mas sempre abandonava depois de alguns dias. Como o FitSync está no WhatsApp, eu realmente lembro de usar. Virou parte da minha rotina.',
+  },
+  {
+    name: 'Beatriz',
+    tag: '26 anos',
+    quote: 'Teve um dia em que eu não tinha nenhum dos alimentos da dieta em casa. Mandei mensagem perguntando o que poderia substituir e recebi opções simples. Foi aí que percebi a diferença.',
+  },
+  {
+    name: 'Gustavo',
+    tag: '33 anos',
+    quote: 'Eu chegava à academia e fazia qualquer exercício que estivesse livre. Agora já chego sabendo o treino, as séries e o que preciso fazer. Economizo tempo e treino com muito mais confiança.',
+  },
+]
 
 // ─── Métricas de tração ──────────────────────────────────────────────────
 export interface Stat {
