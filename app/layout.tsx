@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { MetaPixel } from '@/components/analytics/MetaPixel'
 import { Clarity } from '@/components/analytics/Clarity'
+import { PostHog } from '@/components/analytics/PostHog'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -33,6 +34,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col antialiased">
         <MetaPixel />
         <Clarity />
+        <PostHog />
         {children}
       </body>
     </html>

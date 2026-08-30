@@ -109,6 +109,7 @@ export async function startCheckout(params: {
 // ─── Consultar assinatura ──────────────────────────────────────────────
 
 export interface MySubscription {
+  id: string
   status: string
   plan: string
   value: number
@@ -134,6 +135,7 @@ export async function getMySubscription(): Promise<MySubscription | null> {
   if (!sub) return null
 
   return {
+    id: sub.id,
     status: sub.status,
     plan: sub.plan,
     value: sub.value,

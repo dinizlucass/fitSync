@@ -125,6 +125,53 @@ export default function AdminClient({
         </div>
       )}
 
+      {/* Funil de conversão */}
+      {stats?.funnel && (
+        <div className="rounded-xl border p-4 mb-6" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-card)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium">Funil de conversão</p>
+            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>topo de funil (visitas/cliques) no PostHog</span>
+          </div>
+          <div className="space-y-1.5">
+            {(() => {
+              const f = stats.funnel
+              const base = f.signups || 1
+              const steps = [
+                { label: 'Cadastros', value: f.signups },
+                { label: 'Completaram onboarding', value: f.onboarded },
+                { label: 'Vincularam WhatsApp', value: f.whatsapp },
+                { label: 'Iniciaram checkout', value: f.checkoutStarted },
+                { label: 'Em trial', value: f.trialing },
+                { label: 'Pagantes', value: f.paid },
+              ]
+              return steps.map((st) => {
+                const pct = Math.round((st.value / base) * 100)
+                return (
+                  <div key={st.label} className="flex items-center gap-3">
+                    <div className="w-44 text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{st.label}</div>
+                    <div className="flex-1 h-5 rounded-md overflow-hidden" style={{ backgroundColor: 'var(--color-background)' }}>
+                      <div className="h-full rounded-md flex items-center px-2" style={{ width: `${Math.max(pct, 6)}%`, backgroundColor: 'var(--color-primary)' }}>
+                        <span className="text-xs font-medium text-white whitespace-nowrap">{st.value}</span>
+                      </div>
+                    </div>
+                    <div className="w-10 text-right text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{pct}%</div>
+                  </div>
+                )
+              })
+            })()}
+          </div>
+          <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }}>
+            % relativo aos cadastros. Conversão trial→pagante:{' '}
+            <strong style={{ color: 'var(--color-text)' }}>
+              {stats.funnel.trialing + stats.funnel.paid > 0
+                ? Math.round((stats.funnel.paid / (stats.funnel.trialing + stats.funnel.paid)) * 100)
+                : 0}%
+            </strong>
+            {' · '}cancelamentos: <strong style={{ color: 'var(--color-text)' }}>{stats.funnel.canceled}</strong>
+          </p>
+        </div>
+      )}
+
       {/* Busca + criar */}
       <div className="flex gap-2 mb-4">
         <form onSubmit={handleSearch} className="flex-1 flex gap-2">

@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { startCheckout, cancelMySubscription, getMySubscription, type MySubscription } from '@/app/actions/subscription'
-import { trackPixel } from '@/lib/analytics/pixel'
+import { track } from '@/lib/analytics/track'
 
 interface PlanView {
   id: string
@@ -68,8 +68,13 @@ export default function AssinaturaClient({
         const sub = await getMySubscription()
         if (sub && (sub.status === 'TRIALING' || sub.status === 'ACTIVE')) {
           clearInterval(timer)
-          // conversão confirmada: trial iniciado / assinatura ativa
-          trackPixel(sub.status === 'TRIALING' ? 'StartTrial' : 'Subscribe', { currency: 'BRL' })
+          // conversão confirmada: trial iniciado / assinatura ativa.
+          // eventId igual ao do CAPI (webhook) → Meta deduplica client + server.
+          if (sub.status === 'TRIALING') {
+            track('started_trial', { currency: 'BRL', value: sub.value }, { eventId: `trial:${sub.id}` })
+          } else {
+            track('subscribed', { currency: 'BRL', value: sub.value }, { eventId: `subscribe:${sub.id}` })
+          }
           router.refresh()
         } else if (tries >= 8) {
           clearInterval(timer)
@@ -87,7 +92,7 @@ export default function AssinaturaClient({
       if (res.error) { setError(res.error); return }
       if (res.checkoutUrl) {
         const plan = plans.find((p) => p.id === selected)
-        trackPixel('InitiateCheckout', { currency: 'BRL', value: plan?.value })
+        track('initiated_checkout', { currency: 'BRL', value: plan?.value })
         window.location.href = res.checkoutUrl
         return
       }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { trackPixel } from '@/lib/analytics/pixel'
+import { track, identifyUser } from '@/lib/analytics/track'
 import { validatePassword, PASSWORD_RULES } from '@/lib/auth/password'
 
 type Tab = 'login' | 'signup' | 'forgot'
@@ -73,11 +73,12 @@ export default function LoginPage() {
     }
 
     if (tab === 'login') {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
         setError(traduzirErroAuth(error.message))
         setLoading(false)
       } else {
+        if (data.user) identifyUser(data.user.id, { email })
         // NÃO reseta o loading: mantém "Entrando..." até a navegação trocar a
         // página (o /app/hoje é pesado e leva um tempo pra carregar). Se
         // resetasse aqui, o botão voltava pra "Entrar" e parecia travado.
@@ -92,6 +93,8 @@ export default function LoginPage() {
     if (pwErr) { setError(pwErr); setLoading(false); return }
     if (password !== confirmPassword) { setError('As senhas não coincidem.'); setLoading(false); return }
 
+    track('started_signup', { method: 'email' })
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -103,7 +106,8 @@ export default function LoginPage() {
     } else if (data.session) {
       // Autoconfirmação ligada: já saiu logado — cadastro concluído.
       // Mantém o loading até a navegação (mesmo motivo do login acima).
-      trackPixel('CompleteRegistration')
+      if (data.user) identifyUser(data.user.id, { email })
+      track('completed_registration', { method: 'email' })
       router.push('/app/hoje')
       router.refresh()
     } else {
@@ -133,7 +137,8 @@ export default function LoginPage() {
     }
     // Cadastro realmente concluído aqui (e-mail verificado).
     // Mantém o loading até a navegação trocar a página.
-    trackPixel('CompleteRegistration')
+    if (data.user) identifyUser(data.user.id, { email: pendingEmail })
+    track('completed_registration', { method: 'email' })
     router.push('/app/hoje')
     router.refresh()
   }

@@ -28,6 +28,16 @@ export interface AdminStats {
   subsPastDue: number
   mealsToday: number
   coachMsgsToday: number
+  /** Funil de conversão (contagens no banco). */
+  funnel: {
+    signups: number        // cadastros (total de usuários)
+    onboarded: number      // completaram metas (perfil com meta de calorias)
+    whatsapp: number       // vincularam o WhatsApp
+    checkoutStarted: number// iniciaram um checkout real (exclui cortesias admin)
+    trialing: number       // em teste grátis
+    paid: number           // pagantes ativos (exclui cortesias)
+    canceled: number       // cancelaram (checkout real)
+  }
 }
 
 export async function getAdminStats(): Promise<AdminStats | { error: string }> {
@@ -41,6 +51,7 @@ export async function getAdminStats(): Promise<AdminStats | { error: string }> {
       totalUsers, newUsers7d, phoneLinked,
       subsTrialing, subsActive, subsPastDue,
       mealsToday, coachMsgsToday,
+      onboarded, checkoutStarted, canceledReal, paidReal,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
@@ -50,12 +61,27 @@ export async function getAdminStats(): Promise<AdminStats | { error: string }> {
       prisma.subscription.count({ where: { status: 'PAST_DUE' } }).catch(() => 0),
       prisma.mealLog.count({ where: { date: { gte: start, lte: end } } }),
       prisma.chatMessage.count({ where: { role: 'user', createdAt: { gte: start, lte: end } } }).catch(() => 0),
+      // Funil: onboarding = perfil com meta de calorias definida
+      prisma.profile.count({ where: { calorieGoal: { not: null } } }).catch(() => 0),
+      // checkouts reais (cortesias admin têm billingType 'ADMIN')
+      prisma.subscription.count({ where: { billingType: { not: 'ADMIN' } } }).catch(() => 0),
+      prisma.subscription.count({ where: { status: 'CANCELED', billingType: { not: 'ADMIN' } } }).catch(() => 0),
+      prisma.subscription.count({ where: { status: 'ACTIVE', billingType: { not: 'ADMIN' } } }).catch(() => 0),
     ])
 
     return {
       totalUsers, newUsers7d, phoneLinked,
       subsTrialing, subsActive, subsPastDue,
       mealsToday, coachMsgsToday,
+      funnel: {
+        signups: totalUsers,
+        onboarded,
+        whatsapp: phoneLinked,
+        checkoutStarted,
+        trialing: subsTrialing,
+        paid: paidReal,
+        canceled: canceledReal,
+      },
     }
   } catch (e) {
     reportError('admin:getAdminStats', e)

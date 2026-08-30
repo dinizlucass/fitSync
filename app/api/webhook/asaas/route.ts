@@ -7,6 +7,7 @@ import {
   sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
 } from '@/lib/email'
+import { sendCapiEvent } from '@/lib/analytics/capi'
 import { reportError } from '@/lib/monitoring'
 
 /**
@@ -133,9 +134,14 @@ export async function POST(request: NextRequest) {
       switch (newStatus) {
         case 'TRIALING':
           void sendTrialStartedEmail(u.email, u.name, sub.trialEndsAt)
+          // CAPI: início de trial é server-side (não passa pelo Pixel do client)
+          void sendCapiEvent({ eventName: 'StartTrial', email: u.email, eventId: `trial:${sub.id}` })
           break
         case 'ACTIVE':
           void sendPaymentConfirmedEmail(u.email, { name: u.name, planName, value: sub.value, nextDueDate: nextDue })
+          // CAPI: conversão real (pagamento confirmado) — o evento que o anúncio otimiza
+          void sendCapiEvent({ eventName: 'Purchase', email: u.email, value: sub.value, currency: 'BRL', eventId: `purchase:${payment.id}` })
+          void sendCapiEvent({ eventName: 'Subscribe', email: u.email, value: sub.value, currency: 'BRL', eventId: `subscribe:${sub.id}` })
           break
         case 'PAST_DUE':
           void sendPaymentFailedEmail(u.email, u.name)
