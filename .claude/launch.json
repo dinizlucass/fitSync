@@ -5,6 +5,7 @@
       "name": "fitsync-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
+      "cwd": "C:\\fitSync\\fitsync",
       "port": 3000
     }
   ]

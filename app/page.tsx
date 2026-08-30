@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { PLANS } from '@/lib/asaas/config'
+import { TESTIMONIALS, STATS, PRODUCT_FACTS, FAQ } from '@/lib/landing/social-proof'
 
 const brl = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: v % 1 ? 2 : 0 })
@@ -195,6 +196,20 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Faixa de prova / fatos — usa STATS (números reais) se houver; senão, os fatos do produto */}
+      <section className="py-10 border-y" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)' }}>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+            {(STATS.length > 0 ? STATS : PRODUCT_FACTS).map((s) => (
+              <div key={s.label} className="text-center">
+                <div className="text-2xl sm:text-3xl font-medium tracking-tight" style={{ color: 'var(--color-primary)' }}>{s.value}</div>
+                <div className="text-xs sm:text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Features */}
       <section id="funcionalidades" className="py-20" style={{ backgroundColor: 'var(--color-surface)' }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
@@ -327,6 +342,43 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Depoimentos — só aparece quando houver depoimentos reais em TESTIMONIALS */}
+      {TESTIMONIALS.length > 0 && (
+        <section className="py-20 border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)' }}>
+          <div className="max-w-6xl mx-auto px-4 sm:px-6">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-medium tracking-tight mb-3">Quem usa, recomenda</h2>
+              <p className="text-base" style={{ color: 'var(--color-text-muted)' }}>
+                Resultados reais de quem treina com o FitSync
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {TESTIMONIALS.map((t) => (
+                <div key={t.name} className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)', borderRadius: 'var(--radius-card)' }}>
+                  <div className="flex items-center gap-1 mb-3" style={{ color: 'var(--color-fat)' }}>
+                    {[0, 1, 2, 3, 4].map(i => (
+                      <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                      </svg>
+                    ))}
+                  </div>
+                  <p className="text-sm leading-relaxed mb-4">&ldquo;{t.quote}&rdquo;</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: 'var(--color-primary)' }}>
+                      {t.name.trim().charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">{t.name}</div>
+                      <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{t.tag}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Plans */}
       <section id="planos" className="py-20" style={{ backgroundColor: 'var(--color-surface)' }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
@@ -386,6 +438,48 @@ export default function LandingPage() {
               </Link>
             </div>
           </div>
+
+          {/* Faixa de confiança — tudo verdadeiro */}
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            {[
+              { label: 'Pagamento seguro', d: 'M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z M9 12l2 2 4-4' },
+              { label: '7 dias grátis no mensal', d: 'M12 2a10 10 0 100 20 10 10 0 000-20z M12 7v5l3 2' },
+              { label: 'Cancele quando quiser', d: 'M20 6L9 17l-5-5' },
+              { label: 'Seus dados protegidos (LGPD)', d: 'M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z' },
+            ].map((it) => (
+              <span key={it.label} className="inline-flex items-center gap-1.5">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d={it.d} />
+                </svg>
+                {it.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ — quebra de objeções */}
+      <section id="faq" className="py-20 border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)' }}>
+        <div className="max-w-2xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-medium tracking-tight mb-3">Perguntas frequentes</h2>
+            <p className="text-base" style={{ color: 'var(--color-text-muted)' }}>
+              Tudo que você precisa saber antes de começar
+            </p>
+          </div>
+          <div className="space-y-3">
+            {FAQ.map((item) => (
+              <details key={item.q} className="group rounded-xl border p-4" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-card)' }}>
+                <summary className="flex items-center justify-between cursor-pointer text-sm font-medium list-none">
+                  {item.q}
+                  <svg className="transition-transform group-open:rotate-45 flex-shrink-0 ml-3" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </summary>
+                <p className="text-sm leading-relaxed mt-3" style={{ color: 'var(--color-text-muted)' }}>{item.a}</p>
+              </details>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -404,6 +498,9 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Espaço para o CTA fixo do mobile não cobrir o rodapé */}
+      <div className="h-20 md:hidden" aria-hidden />
+
       {/* Footer */}
       <footer className="py-8 border-t" style={{ borderColor: 'var(--color-border)' }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -421,6 +518,24 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* CTA fixo no mobile — sempre visível pra facilitar a conversão */}
+      <div
+        className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t px-4 py-3"
+        style={{
+          borderColor: 'var(--color-border)',
+          backgroundColor: 'var(--color-background)',
+          paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))',
+        }}
+      >
+        <Link
+          href="/login?tab=signup"
+          className="block text-center text-sm py-3 rounded-lg text-white font-medium transition-opacity hover:opacity-90"
+          style={{ backgroundColor: 'var(--color-primary)' }}
+        >
+          Testar grátis por {monthly.trialDays} dias
+        </Link>
+      </div>
     </div>
   )
 }
