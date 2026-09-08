@@ -111,6 +111,6 @@ export const FAQ: Faq[] = [
   },
   {
     q: 'Posso trocar de plano depois?',
-    a: 'Pode. Comece no mensal com os 7 dias grátis e migre para o anual (com desconto) quando quiser.',
+    a: 'Para mudar de plano, fale com nosso suporte em contato@fitsync.app.br. Assim conferimos sua assinatura atual e orientamos a troca sem criar cobranças duplicadas.',
   },
 ]

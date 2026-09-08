@@ -6,7 +6,8 @@ import { calculateTDEE, calculateMacros } from '@/lib/calculations'
 import { revalidatePath } from 'next/cache'
 import { sendWelcomeEmail } from '@/lib/email'
 import { enforceRateLimit } from '@/lib/ratelimit'
-import { SUBSCRIPTION_ENFORCED, ACTIVE_STATUSES } from '@/lib/asaas/config'
+import { SUBSCRIPTION_ENFORCED } from '@/lib/asaas/config'
+import { subscriptionGrantsAccess } from '@/lib/subscription-status'
 
 type GoalType = 'GAIN_MUSCLE' | 'LOSE_FAT' | 'RECOMPOSITION' | 'MAINTAIN'
 type ActivityLevel = 'SEDENTARY' | 'LIGHT' | 'MODERATE' | 'ACTIVE' | 'VERY_ACTIVE'
@@ -105,7 +106,7 @@ export async function saveGoals(data: SaveGoalsInput) {
     let mustSubscribe = false
     if (SUBSCRIPTION_ENFORCED) {
       const sub = await prisma.subscription.findUnique({ where: { userId: dbUser.id } }).catch(() => null)
-      mustSubscribe = !sub || !ACTIVE_STATUSES.includes(sub.status as never)
+      mustSubscribe = !subscriptionGrantsAccess(sub)
     }
 
     return { success: true, mustSubscribe }

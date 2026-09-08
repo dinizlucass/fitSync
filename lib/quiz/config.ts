@@ -52,7 +52,7 @@ export const QUESTIONS: QuizQuestion[] = [
   {
     id: 'sex',
     title: 'Qual é o seu sexo biológico?',
-    subtitle: 'Usamos para calcular suas metas com precisão',
+    subtitle: 'Usamos para estimar suas metas iniciais',
     type: 'single',
     options: [
       { value: 'male', label: 'Masculino' },
@@ -169,18 +169,18 @@ export const ANGLE_OBJECTIVE: Record<string, Objective> = {
 }
 
 // ─── Motor de resultado ──────────────────────────────────────────────────
-const OBJ_TO_GOAL: Record<Objective, GoalType> = {
+export const OBJ_TO_GOAL: Record<Objective, GoalType> = {
   emagrecer: 'LOSE_FAT',
   massa: 'GAIN_MUSCLE',
   definir: 'RECOMPOSITION',
   saude: 'MAINTAIN',
 }
 
-const DAYS_TO_ACTIVITY: Record<string, ActivityLevel> = {
+export const DAYS_TO_ACTIVITY: Record<string, ActivityLevel> = {
   '2': 'LIGHT',
   '3': 'MODERATE',
-  '4': 'ACTIVE',
-  '5': 'VERY_ACTIVE',
+  '4': 'MODERATE',
+  '5': 'MODERATE',
 }
 
 // Diagnóstico por objetivo (abre o resultado conectando com o desejo).
@@ -202,9 +202,9 @@ const PAIN_LINE: Record<string, string> = {
   comojazer:
     'Você não precisa saber montar treino nem dieta: a FitSync monta tudo pra você e ajusta conforme sua evolução.',
   desisto:
-    'Quem começa e desiste geralmente falta de acompanhamento, não de força de vontade. Por isso o coach te lembra e ajusta o plano quando a rotina aperta.',
+    'Quando a rotina apertar, converse com o coach pelo WhatsApp para adaptar seu plano e encontrar um próximo passo possível.',
   acompanhamento:
-    'O que faltava era acompanhamento de verdade. Aqui você tira dúvida a qualquer hora no WhatsApp e recebe ajustes toda semana.',
+    'Aqui você pode tirar dúvidas pelo WhatsApp e pedir ajustes ao coach conforme sua rotina e evolução.',
 }
 
 interface SplitDay { day: string; focus: string }
@@ -217,13 +217,14 @@ function buildSplit(place: string, days: string): WorkoutSplit {
 
   if (home) {
     const pool: SplitDay[] = [
-      { day: 'A', focus: 'Pernas e glúteos (peso corporal + halteres)' },
+      { day: 'A', focus: 'Pernas e glúteos' },
       { day: 'B', focus: 'Peito, ombro e tríceps' },
       { day: 'C', focus: 'Costas, bíceps e core' },
       { day: 'D', focus: 'Full body funcional' },
       { day: 'E', focus: 'Cardio + core' },
     ]
-    return { name: `Treino em casa · ${n}x por semana`, days: pool.slice(0, n) }
+    const location = place === 'arlivre' ? 'ao ar livre' : 'em casa'
+    return { name: `Treino ${location} · ${n}x por semana`, days: pool.slice(0, n) }
   }
 
   const pool: SplitDay[] = [
@@ -234,7 +235,7 @@ function buildSplit(place: string, days: string): WorkoutSplit {
     { day: 'E', focus: 'Pernas (posterior) e panturrilha' },
   ]
   const name =
-    n === 2 ? 'Full body AB · 2x por semana'
+    n === 2 ? 'Superiores e inferiores AB · 2x por semana'
     : n === 3 ? 'Divisão ABC · 3x por semana'
     : n === 4 ? 'Divisão ABCD · 4x por semana'
     : 'Divisão ABCDE · 5x por semana'
@@ -249,16 +250,8 @@ function buildSplit(place: string, days: string): WorkoutSplit {
 
 // Projeção de tempo honesta a partir do ritmo saudável de cada objetivo.
 function buildTimeline(obj: Objective, weight?: number, goalWeight?: number): string | null {
-  if (!weight || !goalWeight || obj === 'saude') return null
-  const diff = Math.abs(weight - goalWeight)
-  if (diff < 1) return null
-  // ritmo saudável: ~0,5 kg/sem emagrecendo, ~0,25 kg/sem ganhando massa
-  const perWeek = obj === 'massa' ? 0.25 : 0.5
-  const weeks = Math.round(diff / perWeek)
-  const lo = Math.max(4, weeks - 2)
-  const hi = weeks + 3
-  const verb = weight > goalWeight ? 'chegar aos' : 'alcançar os'
-  return `No seu ritmo e de forma saudável, dá pra ${verb} ${goalWeight} kg em cerca de ${lo} a ${hi} semanas.`
+  if (!weight || !goalWeight || obj === 'saude' || weight === goalWeight) return null
+  return `Você indicou ${goalWeight} kg como meta. O prazo e a adequação dessa meta dependem da sua avaliação individual; acompanhe a evolução e revise suas metas com um profissional.`
 }
 
 export interface QuizResult {
@@ -301,7 +294,7 @@ export function buildResult(name: string, a: QuizAnswers): QuizResult {
     vegetariano: 'vegetariana', vegano: 'vegana', lactose: 'sem lactose', gluten: 'sem glúten',
   }
   const restrictionNote = activeRestr.length
-    ? `Sua dieta será montada ${activeRestr.map((r) => restrLabel[r] ?? r).join(', ')} — sem abrir mão das suas metas.`
+    ? `Preferências informadas: ${activeRestr.map((r) => restrLabel[r] ?? r).join(', ')}. Confirme essas restrições ao gerar seu cardápio no app.`
     : null
 
   const firstName = name.trim().split(/\s+/)[0] || 'você'
@@ -311,7 +304,7 @@ export function buildResult(name: string, a: QuizAnswers): QuizResult {
 
   return {
     name: firstName,
-    headline: `${firstName}, seu plano pra ${objLabel[objective]} está pronto`,
+    headline: `${firstName}, veja sua prévia pra ${objLabel[objective]}`,
     diagnosis: OBJ_DIAGNOSIS[objective],
     painLine: PAIN_LINE[(a.pain1 as string)] ?? PAIN_LINE.acompanhamento,
     calories: macros.calories,

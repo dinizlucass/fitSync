@@ -4,6 +4,7 @@ import './globals.css'
 import { MetaPixel } from '@/components/analytics/MetaPixel'
 import { Clarity } from '@/components/analytics/Clarity'
 import { PostHog } from '@/components/analytics/PostHog'
+import { appPublicUrl } from '@/lib/asaas/config'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -13,8 +14,16 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'FitSync',
-  description: 'Seu consultor de treino e dieta, direto no bolso.',
+  metadataBase: new URL(appPublicUrl()),
+  title: 'FitSync — treino, dieta e coach de IA no WhatsApp',
+  description: 'Registre refeições por mensagem ou foto, organize seus treinos e acompanhe sua evolução. Coach de IA no WhatsApp e no app.',
+  openGraph: {
+    title: 'FitSync — treino e dieta no seu WhatsApp',
+    description: 'Conheça seu coach de IA e descubra sua prévia personalizada no quiz gratuito.',
+    siteName: 'FitSync',
+    locale: 'pt_BR',
+    type: 'website',
+  },
 }
 
 // viewportFit: 'cover' habilita os env(safe-area-inset-*) no iOS (notch/home indicator)

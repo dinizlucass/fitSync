@@ -85,6 +85,7 @@ export async function sendCapiEvent(params: CapiParams): Promise<void> {
     const res = await fetch(
       `https://graph.facebook.com/${API_VERSION}/${PIXEL_ID}/events?access_token=${TOKEN}`,
       {
+        signal: AbortSignal.timeout(5000),
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

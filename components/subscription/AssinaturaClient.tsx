@@ -68,6 +68,7 @@ export default function AssinaturaClient({
         const sub = await getMySubscription()
         if (sub && (sub.status === 'TRIALING' || sub.status === 'ACTIVE')) {
           clearInterval(timer)
+          setProcessing(false)
           // conversão confirmada: trial iniciado / assinatura ativa.
           // eventId igual ao do CAPI (webhook) → Meta deduplica client + server.
           if (sub.status === 'TRIALING') {
@@ -81,6 +82,7 @@ export default function AssinaturaClient({
           setProcessing(false)
         }
       }, 2000)
+      return () => clearInterval(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -177,7 +179,7 @@ export default function AssinaturaClient({
   }
 
   // ── Estado: sem assinatura ativa (novo / pendente / cancelada) ──────
-  const resumeCheckout = current && current.status === 'PENDING' ? current.checkoutUrl : null
+  const resumeCheckout = current && ['PENDING', 'PAST_DUE', 'EXPIRED'].includes(current.status) ? current.checkoutUrl : null
   const selectedPlan = plans.find(p => p.id === selected) ?? plans[0]
   const trialDays = selectedPlan?.trialDays ?? 0
   const hasTrial = trialDays > 0

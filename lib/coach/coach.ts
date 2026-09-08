@@ -14,6 +14,7 @@ import { TOOL_DEFINITIONS, executeTool } from '@/lib/coach/tools'
 import { checkCoachRateLimit } from '@/lib/coach/rate-limit'
 import { enforceRateLimit } from '@/lib/ratelimit'
 import { reportError } from '@/lib/monitoring'
+import { canUsePremium, PREMIUM_REQUIRED } from '@/lib/premium-access'
 
 const COACH_MODEL = 'gpt-4.1-mini'
 const MAX_TOOL_ROUNDS = 3
@@ -26,6 +27,7 @@ export interface RunCoachParams {
 }
 
 export async function runCoach({ userId, message, channel = 'whatsapp' }: RunCoachParams): Promise<string> {
+  if (!(await canUsePremium(userId))) return PREMIUM_REQUIRED
   // 0. Rate limit — protege o custo de OpenAI. Mensagem bloqueada não chama a
   // LLM e não entra na memória.
   // 0a. Rajada via Redis (preciso, sem tocar o banco). Fail-open se Upstash off.

@@ -5,6 +5,7 @@ import { generateWeeklyInsight } from '@/lib/openai'
 import { enforceRateLimit } from '@/lib/ratelimit'
 import { startOfDay } from 'date-fns'
 import { saoPauloDateStr } from '@/lib/coach/shared'
+import { canUsePremium, PREMIUM_REQUIRED } from '@/lib/premium-access'
 
 export async function GET(_request: NextRequest) {
   const supabase = await createClient()
@@ -20,6 +21,7 @@ export async function GET(_request: NextRequest) {
   }
 
   // Rate limit — insight semanal (gpt-4o) dispara ao abrir a tela de progresso.
+  if (!(await canUsePremium(dbUser.id))) return Response.json({ error: PREMIUM_REQUIRED }, { status: 403 })
   const rl = await enforceRateLimit('ai:insight', dbUser.id)
   if (!rl.allowed) {
     return Response.json({ error: rl.message }, { status: 429 })

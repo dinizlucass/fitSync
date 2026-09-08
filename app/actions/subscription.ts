@@ -6,11 +6,12 @@ import { revalidatePath } from 'next/cache'
 import { saoPauloDateStr } from '@/lib/coach/shared'
 import { reportError } from '@/lib/monitoring'
 import {
-  getPlan, ACTIVE_STATUSES,
+  getPlan,
   CHECKOUT_BILLING_TYPES, CHECKOUT_EXPIRES_MIN, appPublicUrl,
 } from '@/lib/asaas/config'
 import { createAsaasCheckout, cancelAsaasSubscription } from '@/lib/asaas/client'
 import { enforceRateLimit } from '@/lib/ratelimit'
+import { subscriptionGrantsAccess } from '@/lib/subscription-status'
 
 /** Data de vencimento inicial (hoje + dias de trial) em yyyy-MM-dd, ancorada ao meio-dia. */
 function nextDueDateISO(trialDays: number): string {
@@ -39,8 +40,14 @@ export async function startCheckout(params: {
 
   // Já tem assinatura liberando acesso? Não cria outra.
   const existing = dbUser.subscription
-  if (existing && ACTIVE_STATUSES.includes(existing.status as never)) {
+  if (subscriptionGrantsAccess(existing)) {
     return { alreadyActive: true }
+  }
+  // Recover the existing invoice instead of creating another recurring charge.
+  if (existing?.asaasSubscriptionId && ['TRIALING', 'PAST_DUE', 'PENDING'].includes(existing.status)) {
+    return existing.checkoutUrl
+      ? { checkoutUrl: existing.checkoutUrl }
+      : { error: 'Sua assinatura aguarda atualização. Fale com contato@fitsync.app.br antes de iniciar outra cobrança.' }
   }
 
   // Anti-spam de checkout (evita lixo PENDING e abuso da API do Asaas).
@@ -136,7 +143,7 @@ export async function getMySubscription(): Promise<MySubscription | null> {
 
   return {
     id: sub.id,
-    status: sub.status,
+    status: sub.status === 'TRIALING' && !subscriptionGrantsAccess(sub) ? 'EXPIRED' : sub.status,
     plan: sub.plan,
     value: sub.value,
     cycle: sub.cycle,
@@ -181,5 +188,5 @@ export async function cancelMySubscription(): Promise<{ success?: boolean; error
 export async function hasActiveSubscription(userId: string): Promise<boolean> {
   const sub = await prisma.subscription.findUnique({ where: { userId } }).catch(() => null)
   if (!sub) return false
-  return ACTIVE_STATUSES.includes(sub.status as never)
+  return subscriptionGrantsAccess(sub)
 }

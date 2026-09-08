@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { sendWhatsAppMessage, downloadMetaMedia } from '@/lib/whatsapp'
 import { analyzeFoodImage } from '@/lib/openai'
 import { runCoach } from '@/lib/coach/coach'
+import { canUsePremium, PREMIUM_REQUIRED } from '@/lib/premium-access'
 import { dayRange } from '@/lib/coach/shared'
 import { checkCoachRateLimit } from '@/lib/coach/rate-limit'
 import { enforceRateLimit, once, release } from '@/lib/ratelimit'
@@ -148,6 +149,10 @@ export async function POST(request: NextRequest) {
         await sendWhatsAppMessage(from, 'Deu um probleminha aqui pra processar sua mensagem. Tenta de novo daqui a pouco? 🙏')
       }
     } else if (messageType === 'image') {
+      if (!(await canUsePremium(user.id))) {
+        await sendWhatsAppMessage(from, PREMIUM_REQUIRED)
+        return Response.json({ status: 'subscription_required' })
+      }
       // Rate limit também vale pra fotos (análise de imagem é a chamada mais cara)
       const limit = await checkCoachRateLimit(user.id)
       if (!limit.allowed) {

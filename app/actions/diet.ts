@@ -19,7 +19,7 @@ const SEED_FOODS = [
   { name: 'Aveia em flocos', calories: 380, proteinG: 13.9, carbsG: 67, fatG: 7, fiberG: 10.6, servingSize: 100, servingUnit: 'g' },
   { name: 'Banana', calories: 89, proteinG: 1.1, carbsG: 22.8, fatG: 0.3, fiberG: 2.6, servingSize: 100, servingUnit: 'g' },
   { name: 'Maçã', calories: 52, proteinG: 0.3, carbsG: 13.8, fatG: 0.2, fiberG: 2.4, servingSize: 100, servingUnit: 'g' },
-  { name: 'Whey Protein', calories: 370, proteinG: 80, carbsG: 6, fatG: 5, fiberG: 0, servingSize: 30, servingUnit: 'g' },
+  { name: 'Whey Protein', calories: 370, proteinG: 80, carbsG: 6, fatG: 5, fiberG: 0, servingSize: 100, servingUnit: 'g' },
   { name: 'Iogurte grego natural', calories: 97, proteinG: 9, carbsG: 3.6, fatG: 5, fiberG: 0, servingSize: 100, servingUnit: 'g' },
   { name: 'Azeite de oliva', calories: 884, proteinG: 0, carbsG: 0, fatG: 100, fiberG: 0, servingSize: 100, servingUnit: 'ml' },
   { name: 'Pão integral', calories: 247, proteinG: 8.8, carbsG: 47.7, fatG: 3.4, fiberG: 6.7, servingSize: 100, servingUnit: 'g' },
@@ -54,6 +54,10 @@ function mealNameToType(name: string): 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK
 // ─── Search ────────────────────────────────────────────────────────────────
 
 export async function searchFoods(query: string) {
+  if (typeof query !== 'string' || query.trim().length < 2 || query.length > 100) return []
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
   const dbFoods = await prisma.food.findMany({
     where: { name: { contains: query, mode: 'insensitive' } },
     take: 10,
@@ -67,9 +71,9 @@ export async function searchFoods(query: string) {
         update: {},
       }).catch(() => {})
     }
-    return SEED_FOODS.filter(f =>
-      f.name.toLowerCase().includes(query.toLowerCase())
-    ).slice(0, 10)
+    return prisma.food.findMany({
+      where: { name: { contains: query, mode: 'insensitive' } }, take: 10,
+    }).catch(() => [])
   }
 
   return dbFoods
@@ -94,18 +98,22 @@ export async function addMealItem(data: {
 
   const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
   if (!dbUser) return { error: 'Usuário não encontrado' }
+  if (!Number.isFinite(data.quantityG) || data.quantityG <= 0 || data.quantityG > 5000) return { error: 'Quantidade inválida' }
 
   try {
     let foodId = data.foodId
 
     if (!foodId && data.foodName) {
-      const food = await prisma.food.create({
-        data: {
+      const food = await prisma.food.upsert({
+        where: { name: data.foodName },
+        update: {},
+        create: {
           name: data.foodName,
           calories: data.calories ?? 0,
           proteinG: data.proteinG ?? 0,
           carbsG: data.carbsG ?? 0,
           fatG: data.fatG ?? 0,
+          servingSize: data.quantityG,
         },
       })
       foodId = food.id
@@ -176,6 +184,7 @@ export async function removeMealItem(id: string) {
 // ─── Update item quantity ──────────────────────────────────────────────────
 
 export async function updateMealItem(data: { itemId: string; newQuantityG: number }) {
+  if (!Number.isFinite(data.newQuantityG) || data.newQuantityG <= 0 || data.newQuantityG > 5000) return { error: 'Quantidade inválida' }
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
@@ -244,6 +253,7 @@ export async function saveDietPlanAction(meals: Array<{
       })
 
       for (const item of meal.items) {
+        const quantityG = parseQuantityG(item.quantity, item.calories)
         const food = await prisma.food.upsert({
           where: { name: item.food },
           create: {
@@ -252,11 +262,10 @@ export async function saveDietPlanAction(meals: Array<{
             proteinG: item.proteinG,
             carbsG: item.carbsG,
             fatG: item.fatG,
+            servingSize: quantityG,
           },
           update: {},
         })
-
-        const quantityG = parseQuantityG(item.quantity, item.calories)
 
         await prisma.mealItem.create({
           data: { mealLogId: mealLog.id, foodId: food.id, quantityG },
@@ -383,12 +392,12 @@ export async function saveDietTemplateAction(
       })
 
       for (const item of meal.items) {
+        const quantityG = parseQuantityG(item.quantity, item.calories)
         const food = await prisma.food.upsert({
           where: { name: item.food },
-          create: { name: item.food, calories: item.calories, proteinG: item.proteinG, carbsG: item.carbsG, fatG: item.fatG },
+          create: { name: item.food, calories: item.calories, proteinG: item.proteinG, carbsG: item.carbsG, fatG: item.fatG, servingSize: quantityG },
           update: {},
         })
-        const quantityG = parseQuantityG(item.quantity, item.calories)
         await prisma.dietTemplateMealItem.create({
           data: { mealId: templateMeal.id, foodId: food.id, quantityG },
         })

@@ -48,6 +48,12 @@ export default function LoginPage() {
     // Veio do quiz: já abre no cadastro com o nome preenchido
     const nome = params.get('nome')
     if (nome) { setTab('signup'); setName(nome) }
+    if (params.get('from') === 'quiz') {
+      try {
+        const quiz = JSON.parse(localStorage.getItem('fitsync_quiz') ?? 'null')
+        if (typeof quiz?.name === 'string') setName(quiz.name.slice(0, 100))
+      } catch { /* Cadastro continua disponível sem armazenamento local. */ }
+    }
     if (params.get('error') === 'oauth') {
       setError('Não foi possível entrar com o Google. Tente novamente ou use e-mail e senha.')
       window.history.replaceState({}, '', '/login')
@@ -396,7 +402,7 @@ export default function LoginPage() {
 
                 {tab === 'signup' && (
                   <p className="text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
-                    7 dias grátis com acesso completo. Sem cartão agora — cancele quando quiser.
+                    Crie sua conta e escolha um plano. O mensal tem 7 dias grátis, com cartão para ativar; depois R$ 29,90/mês. Anual: R$ 257, sem teste grátis.
                   </p>
                 )}
 

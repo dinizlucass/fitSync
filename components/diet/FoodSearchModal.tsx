@@ -62,19 +62,21 @@ export default function FoodSearchModal({ mealType, date, onClose, onAdded }: Fo
   }, [])
 
   useEffect(() => {
+    let canceled = false
     if (query.length < 2) {
       setResults([])
+      setSearching(false)
       return
     }
     const timer = setTimeout(async () => {
       setSearching(true)
       try {
         const foods = await searchFoods(query)
-        setResults(foods as Food[])
+        if (!canceled) setResults(foods as Food[])
       } catch {}
-      setSearching(false)
+      if (!canceled) setSearching(false)
     }, 300)
-    return () => clearTimeout(timer)
+    return () => { canceled = true; clearTimeout(timer) }
   }, [query])
 
   function selectFood(food: Food) {
@@ -93,29 +95,35 @@ export default function FoodSearchModal({ mealType, date, onClose, onAdded }: Fo
     const qty = parseFloat(quantity)
     if (!qty || qty <= 0) { setAdding(false); return }
 
-    const res = await addMealItem({
-      foodId: selectedFood.id,
-      foodName: selectedFood.name,
-      mealType,
-      date,
-      quantityG: qty,
-      calories: calcNutrient(selectedFood.calories, qty, selectedFood.servingSize),
-      proteinG: calcNutrient(selectedFood.proteinG, qty, selectedFood.servingSize),
-      carbsG: calcNutrient(selectedFood.carbsG, qty, selectedFood.servingSize),
-      fatG: calcNutrient(selectedFood.fatG, qty, selectedFood.servingSize),
-    })
+    try {
+      const res = await addMealItem({
+        foodId: selectedFood.id,
+        foodName: selectedFood.name,
+        mealType,
+        date,
+        quantityG: qty,
+        calories: calcNutrient(selectedFood.calories, qty, selectedFood.servingSize),
+        proteinG: calcNutrient(selectedFood.proteinG, qty, selectedFood.servingSize),
+        carbsG: calcNutrient(selectedFood.carbsG, qty, selectedFood.servingSize),
+        fatG: calcNutrient(selectedFood.fatG, qty, selectedFood.servingSize),
+      })
 
-    setAdding(false)
+      setAdding(false)
 
-    // Antes o erro era engolido: o modal fechava e o item simplesmente não aparecia
-    if (res && 'error' in res && res.error) {
-      setAddError(res.error)
-      return
+      // Antes o erro era engolido: o modal fechava e o item simplesmente não aparecia
+      if (res && 'error' in res && res.error) {
+        setAddError(res.error)
+        return
+      }
+
+      // Feature 6 — Update recent foods in localStorage
+      saveRecentFood(selectedFood)
+      onAdded()
+    } catch {
+      setAddError('Não foi possível salvar. Confira sua conexão e tente novamente.')
+    } finally {
+      setAdding(false)
     }
-
-    // Feature 6 — Update recent foods in localStorage
-    saveRecentFood(selectedFood)
-    onAdded()
   }
 
   const qty = parseFloat(quantity) || 0

@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
   if (!payment.subscription) return Response.json({ status: 'no_subscription' })
 
   // Localiza nosso registro: por assinatura já vinculada OU pelo externalReference (userId)
+  let lookupFailed = false
   const sub = await prisma.subscription.findFirst({
     where: {
       OR: [
@@ -81,7 +82,14 @@ export async function POST(request: NextRequest) {
         ...(payment.externalReference ? [{ userId: payment.externalReference }] : []),
       ],
     },
-  }).catch(() => null)
+  }).catch((error) => {
+    lookupFailed = true
+    reportError('asaas:webhookLookup', error, { event })
+    return null
+  })
+
+  // Acknowledge only a successful lookup; 500 lets Asaas retry a DB outage.
+  if (lookupFailed) return Response.json({ status: 'error' }, { status: 500 })
 
   if (!sub) return Response.json({ status: 'subscription_not_found' })
 

@@ -43,12 +43,12 @@ export const CHECKOUT_BILLING_TYPES = ['CREDIT_CARD'] as const
 export const CHECKOUT_EXPIRES_MIN = 60
 
 export function getPlan(planId: string): Plan | null {
-  return PLANS[planId as PlanId] ?? null
+  return Object.hasOwn(PLANS, planId) ? PLANS[planId as PlanId] : null
 }
 
 /** URL pública do app (para as URLs de retorno do checkout). */
 export function appPublicUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.fitsync.app.br'
+  return process.env.NEXT_PUBLIC_APP_URL || 'https://www.fitsync.app.br'
 }
 
 /** Base da API conforme o ambiente. Sandbox por padrão até a chave de produção entrar. */

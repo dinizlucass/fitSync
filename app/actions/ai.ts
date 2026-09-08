@@ -15,6 +15,7 @@ import {
 import { runCoach } from '@/lib/coach/coach'
 import { enforceRateLimit } from '@/lib/ratelimit'
 import { reportError } from '@/lib/monitoring'
+import { canUsePremiumByAuthId, PREMIUM_REQUIRED } from '@/lib/premium-access'
 import { WORKOUT_METHODS } from '@/lib/workout-methods'
 import type { SmartDietPlan, MealVariant } from '@/lib/diet-types'
 import type { SmartProgramPlan, ExerciseAlternative, VolumePreference } from '@/lib/workout-types'
@@ -68,6 +69,7 @@ export async function generateProgramAction(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
+  if (!(await canUsePremiumByAuthId(user.id))) return { error: PREMIUM_REQUIRED }
 
   const dbUser = await prisma.user.findUnique({
     where: { supabaseId: user.id },
@@ -143,6 +145,7 @@ export async function generateAutoProgramAction(): Promise<{ plan?: SmartProgram
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
+  if (!(await canUsePremiumByAuthId(user.id))) return { error: PREMIUM_REQUIRED }
 
   const dbUser = await prisma.user.findUnique({
     where: { supabaseId: user.id },
@@ -191,6 +194,7 @@ export async function generateDietPlanAction(params: {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
+  if (!(await canUsePremiumByAuthId(user.id))) return { error: PREMIUM_REQUIRED }
 
   const dbUser = await prisma.user.findUnique({
     where: { supabaseId: user.id },
@@ -244,6 +248,7 @@ export async function refineMealVariantAction(params: {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
+  if (!(await canUsePremiumByAuthId(user.id))) return { error: PREMIUM_REQUIRED }
 
   const rl = await enforceRateLimit('ai:refine', user.id)
   if (!rl.allowed) return { error: rl.message }
@@ -269,6 +274,7 @@ export async function refineExerciseAction(params: {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
+  if (!(await canUsePremiumByAuthId(user.id))) return { error: PREMIUM_REQUIRED }
 
   const rl = await enforceRateLimit('ai:refine', user.id)
   if (!rl.allowed) return { error: rl.message }
@@ -293,6 +299,7 @@ export async function sendChatMessage(params: {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
+  if (!(await canUsePremiumByAuthId(user.id))) return { error: PREMIUM_REQUIRED }
 
   const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
   if (!dbUser) return { error: 'Usuário não encontrado' }

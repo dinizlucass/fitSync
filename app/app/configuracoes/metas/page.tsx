@@ -1,8 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { saveGoals } from '@/app/actions/profile'
+import { OBJ_TO_GOAL, DAYS_TO_ACTIVITY, type Objective } from '@/lib/quiz/config'
+import { validateQuizAnswers } from '@/lib/quiz/validation'
+import { calculateTDEE, calculateMacros } from '@/lib/calculations'
 
 type GoalType = 'GAIN_MUSCLE' | 'LOSE_FAT' | 'RECOMPOSITION' | 'MAINTAIN'
 type ActivityLevel = 'SEDENTARY' | 'LIGHT' | 'MODERATE' | 'ACTIVE' | 'VERY_ACTIVE'
@@ -38,27 +41,29 @@ export default function MetasPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('fitsync_quiz') ?? 'null')
+      const { answers } = validateQuizAnswers(saved?.answers)
+      if (!answers) return
+      setGoalType(OBJ_TO_GOAL[answers.objective as Objective])
+      setWeight(answers.weight as string)
+      setHeight(answers.height as string)
+      if (answers.sex === 'male' || answers.sex === 'female') setSex(answers.sex)
+      setActivityLevel(DAYS_TO_ACTIVITY[answers.days as string])
+      // The quiz collects an age range, so never invent a birth date.
+    } catch { /* Metas continuam editáveis sem o quiz. */ }
+  }, [])
+
   function goToStep(n: number) {
     if (n === 4) {
       // Calculate preview
       const w = parseFloat(weight)
       const h = parseFloat(height)
       if (!w || !h || !birthDate) return
-      const age = new Date().getFullYear() - new Date(birthDate).getFullYear()
-      const multipliers = { SEDENTARY: 1.2, LIGHT: 1.375, MODERATE: 1.55, ACTIVE: 1.725, VERY_ACTIVE: 1.9 }
-      const bmr = sex === 'male'
-        ? 10 * w + 6.25 * h - 5 * age + 5
-        : 10 * w + 6.25 * h - 5 * age - 161
-      const tdee = Math.round(bmr * multipliers[activityLevel])
-
-      let calories = tdee
-      let protein = Math.round(w * 1.8)
-      if (goalType === 'LOSE_FAT') { calories = tdee - 400; protein = Math.round(w * 2.0) }
-      else if (goalType === 'GAIN_MUSCLE') { calories = tdee + 250; protein = Math.round(w * 2.2) }
-      else if (goalType === 'RECOMPOSITION') { protein = Math.round(w * 2.0) }
-
-      const fat = Math.round((calories * 0.27) / 9)
-      const carbs = Math.round((calories - protein * 4 - fat * 9) / 4)
+      const age = Math.floor((Date.now() - new Date(birthDate).getTime()) / (365.25 * 86400_000))
+      const tdee = calculateTDEE(w, h, age, activityLevel, sex)
+      const { calories, proteinG: protein, fatG: fat, carbsG: carbs } = calculateMacros(tdee, goalType, w)
 
       setCalculatedCalories(calories)
       setCalculatedProtein(protein)
@@ -81,6 +86,7 @@ export default function MetasPage() {
         sex,
       })
       if (result.error) { setError(result.error); return }
+      try { localStorage.removeItem('fitsync_quiz') } catch { /* optional storage */ }
       // Com o bloqueio de assinatura ligado, o funil segue pro plano (trial)
       router.push(result.mustSubscribe ? '/app/assinatura' : '/app/hoje')
     } catch {

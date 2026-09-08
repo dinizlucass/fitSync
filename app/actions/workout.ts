@@ -88,6 +88,15 @@ export async function recordSession(data: RecordSessionInput) {
   if (!dbUser) return { error: 'Usuário não encontrado' }
 
   try {
+    const workout = await prisma.workout.findFirst({
+      where: { id: data.workoutId, userId: dbUser.id, archived: false },
+      include: { exercises: { select: { exerciseId: true } } },
+    })
+    if (!workout) return { error: 'Treino não encontrado' }
+    const exerciseIds = new Set(workout.exercises.map(ex => ex.exerciseId))
+    if (!Array.isArray(data.exercises) || !data.exercises.length || data.exercises.some(ex => !exerciseIds.has(ex.exerciseId))) {
+      return { error: 'Exercício não pertence a este treino' }
+    }
     const session = await prisma.workoutSession.create({
       data: {
         userId: dbUser.id,
@@ -155,16 +164,14 @@ export async function updateWorkout(data: {
       })
     )
 
-    // Delete existing workout exercises
-    await prisma.workoutExercise.deleteMany({ where: { workoutId: data.id } })
-
-    // Update workout + recreate exercises
+    // Replace exercises atomically so a failed edit keeps the original workout.
     await prisma.workout.update({
       where: { id: data.id },
       data: {
         name: data.name,
         muscleGroups: data.muscleGroups,
         exercises: {
+          deleteMany: {},
           create: exerciseRecords.map(ex => ({
             exerciseId: ex.exerciseId,
             targetSets: ex.targetSets,

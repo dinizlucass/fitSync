@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { QUESTIONS, type Objective, type QuizAnswers, type QuizResult } from '@/lib/quiz/config'
 import { submitQuizLead, type QuizUtms } from '@/app/actions/quiz'
 import { track } from '@/lib/analytics/track'
+import { normalizeQuizPhone } from '@/lib/quiz/validation'
+import { PLANS } from '@/lib/asaas/config'
 
 type Phase = 'question' | 'interstitial' | 'lead' | 'analyzing' | 'result'
 
@@ -39,7 +41,7 @@ function captureUtms(): QuizUtms {
     utmCampaign: g('utm_campaign'),
     utmContent: g('utm_content'),
     utmTerm: g('utm_term'),
-    fbclid: g('fbclid') ?? g('gclid'),
+    fbclid: g('fbclid'),
   }
 }
 
@@ -58,6 +60,14 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
   const [result, setResult] = useState<QuizResult | null>(null)
   const [analyzingStep, setAnalyzingStep] = useState(0)
   const utms = useRef<QuizUtms>({})
+  const advancing = useRef(false)
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (advanceTimer.current) clearTimeout(advanceTimer.current)
+  }, [])
+
+  useEffect(() => { advancing.current = false }, [qIndex, phase])
 
   // Lista de perguntas visível (respeita preset de objetivo e skips condicionais).
   const visible = useMemo(
@@ -98,7 +108,7 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
   }
 
   function advanceQuestion() {
-    setNumInput('')
+    setNumInput(typeof answers[visible[qIndex + 1]?.id] === 'string' ? answers[visible[qIndex + 1]?.id] as string : '')
     setError(null)
     if (qIndex + 1 >= visible.length) {
       setPhase('lead')
@@ -109,10 +119,21 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
   }
 
   function answerSingle(value: string) {
-    if (!current) return
+    if (!current || advancing.current) return
+    advancing.current = true
     setAnswers((a) => ({ ...a, [current.id]: value }))
-    track('quiz_answered', { question: current.id, value })
-    setTimeout(goNext, 180) // pequeno respiro visual antes de avançar
+    track('quiz_answered', { question: current.id })
+    advanceTimer.current = setTimeout(goNext, 180)
+  }
+
+  function goBack() {
+    if (advanceTimer.current) clearTimeout(advanceTimer.current)
+    advancing.current = false
+    const previous = phase === 'lead' ? visible.length - 1 : Math.max(0, qIndex - 1)
+    setQIndex(previous)
+    setNumInput(typeof answers[visible[previous].id] === 'string' ? answers[visible[previous].id] as string : '')
+    setError(null)
+    setPhase('question')
   }
 
   function toggleMulti(value: string) {
@@ -131,60 +152,68 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
 
   function confirmMulti() {
     if (!current) return
-    track('quiz_answered', { question: current.id, value: answers[current.id] })
+    track('quiz_answered', { question: current.id })
     goNext()
   }
 
   function confirmNumber() {
     if (!current) return
-    const n = parseFloat(numInput.replace(',', '.'))
+    const n = /^\d+(?:[.,]\d+)?$/.test(numInput.trim()) ? Number(numInput.replace(',', '.')) : NaN
     if (!Number.isFinite(n) || (current.min && n < current.min) || (current.max && n > current.max)) {
       setError(`Informe um valor entre ${current.min} e ${current.max} ${current.unit ?? ''}.`)
       return
     }
     setAnswers((a) => ({ ...a, [current.id]: String(n) }))
-    track('quiz_answered', { question: current.id, value: n })
+    track('quiz_answered', { question: current.id })
     goNext()
   }
 
   async function submitLead(e: React.FormEvent) {
     e.preventDefault()
+    if (submitting) return
     setError(null)
     if (name.trim().length < 2) { setError('Digite seu nome.'); return }
-    if (whatsapp.replace(/\D/g, '').length < 10) { setError('Digite um WhatsApp válido com DDD.'); return }
+    if (!normalizeQuizPhone(whatsapp)) { setError('Digite um WhatsApp válido com DDD.'); return }
 
     setSubmitting(true)
     setPhase('analyzing')
     const startedAt = Date.now()
-    const eventId = (crypto?.randomUUID?.() ?? `lead-${Date.now()}`)
+    const eventId = (globalThis.crypto?.randomUUID?.() ?? `lead-${Date.now()}`)
 
-    const res = await submitQuizLead({
-      name: name.trim(),
-      whatsapp,
-      answers,
-      utms: utms.current,
-      eventId,
-    })
-
-    // Garante a animação mínima (percepção de "análise") mesmo se o servidor responder rápido.
-    const elapsed = Date.now() - startedAt
-    await new Promise((r) => setTimeout(r, Math.max(0, 2600 - elapsed)))
-    setSubmitting(false)
-
-    if (res.error || !res.result) {
-      setError(res.error ?? 'Algo deu errado. Tente de novo.')
-      setPhase('lead')
-      return
-    }
-
-    track('quiz_lead', { objective: answers.objective ?? null }, { eventId })
-    track('quiz_completed', { objective: answers.objective ?? null })
-    // Persiste respostas + nome para pré-preencher o cadastro/onboarding.
     try {
-      localStorage.setItem('fitsync_quiz', JSON.stringify({ name: name.trim(), answers, utms: utms.current }))
-    } catch { /* localStorage indisponível: segue sem prefill */ }
-    setResult(res.result)
-    setPhase('result')
+      const res = await submitQuizLead({
+        name: name.trim(),
+        whatsapp,
+        answers,
+        utms: utms.current,
+        eventId,
+      })
+
+      // Garante a animação mínima (percepção de "análise") mesmo se o servidor responder rápido.
+      const elapsed = Date.now() - startedAt
+      await new Promise((r) => setTimeout(r, Math.max(0, 2600 - elapsed)))
+      setSubmitting(false)
+
+      if (res.error || !res.result) {
+        setError(res.error ?? 'Algo deu errado. Tente de novo.')
+        setPhase('lead')
+        return
+      }
+
+      if (res.saved) track('quiz_lead', undefined, { eventId })
+      track('quiz_completed')
+      // Persiste respostas + nome para pré-preencher o cadastro/onboarding.
+      try {
+        localStorage.setItem('fitsync_quiz', JSON.stringify({ name: name.trim(), answers, utms: utms.current }))
+      } catch { /* localStorage indisponível: segue sem prefill */ }
+      setResult(res.result)
+      setPhase('result')
+    } catch {
+      setError('Não foi possível concluir. Confira sua conexão e tente novamente; suas respostas foram mantidas.')
+      setPhase('lead')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   // ── Barra de progresso ─────────────────────────────────────────────────
@@ -208,6 +237,9 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
       </div>
 
       <div className="flex-1 flex flex-col justify-center px-4 pb-10 max-w-lg w-full mx-auto">
+        {((phase === 'question' && qIndex > 0) || phase === 'lead') && (
+          <button type="button" onClick={goBack} className="self-start text-sm mb-5" style={{ color: 'var(--color-text-muted)' }}>← Voltar e corrigir</button>
+        )}
         {/* ── Pergunta ──────────────────────────────────────────────────── */}
         {phase === 'question' && current && (
           <div>
@@ -225,6 +257,7 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
                     <button
                       key={opt.value}
                       onClick={() => answerSingle(opt.value)}
+                      aria-pressed={active}
                       className="w-full flex items-center gap-3 text-left px-4 py-4 rounded-xl border transition-colors"
                       style={{
                         borderColor: active ? 'var(--color-primary)' : 'var(--color-border)',
@@ -250,6 +283,7 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
                       <button
                         key={opt.value}
                         onClick={() => toggleMulti(opt.value)}
+                        aria-pressed={active}
                         className="w-full flex items-center gap-3 text-left px-4 py-3.5 rounded-xl border transition-colors"
                         style={{
                           borderColor: active ? 'var(--color-primary)' : 'var(--color-border)',
@@ -282,13 +316,14 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
               <form onSubmit={(e) => { e.preventDefault(); confirmNumber() }}>
                 <div className="flex items-center gap-2">
                   <input
-                    type="number"
+                    type="text"
                     inputMode="decimal"
+                    aria-label={current.title}
                     value={numInput}
                     onChange={(e) => setNumInput(e.target.value)}
                     placeholder={current.placeholder}
                     autoFocus
-                    className="flex-1 text-lg px-4 py-3.5 rounded-xl border outline-none focus:ring-2"
+                    className="min-w-0 flex-1 text-lg px-4 py-3.5 rounded-xl border outline-none focus:ring-2"
                     style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)' }}
                   />
                   <span className="text-sm font-medium w-8" style={{ color: 'var(--color-text-muted)' }}>{current.unit}</span>
@@ -319,14 +354,18 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
           <form onSubmit={submitLead}>
             <div className="text-center mb-6">
               <div className="text-4xl mb-3">✅</div>
-              <h1 className="text-2xl font-medium tracking-tight mb-2">Seu plano está pronto!</h1>
+              <h1 className="text-2xl font-medium tracking-tight mb-2">Sua prévia está pronta!</h1>
               <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                Deixe seu nome e WhatsApp para desbloquear seu plano personalizado.
+                Deixe seu nome e WhatsApp para ver suas estimativas e uma sugestão de divisão de treino.
               </p>
             </div>
             <div className="space-y-3">
               <input
                 type="text"
+                aria-label="Seu nome"
+                autoComplete="given-name"
+                maxLength={100}
+                required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Seu nome"
@@ -336,6 +375,10 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
               />
               <input
                 type="tel"
+                aria-label="WhatsApp com DDD"
+                autoComplete="tel"
+                maxLength={30}
+                required
                 inputMode="tel"
                 value={whatsapp}
                 onChange={(e) => setWhatsapp(e.target.value)}
@@ -349,7 +392,9 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
               Ver meu plano personalizado
             </button>
             <p className="text-xs text-center mt-3" style={{ color: 'var(--color-text-muted)' }}>
-              Ao continuar, você concorda em receber contato da FitSync. Sem spam.
+              Usamos seus dados para gerar esta prévia e entrar em contato sobre a FitSync. Consulte a{' '}
+              <Link href="/privacidade" target="_blank" className="underline">Política de Privacidade</Link> e os{' '}
+              <Link href="/termos" target="_blank" className="underline">Termos de Uso</Link>.
             </p>
           </form>
         )}
@@ -365,14 +410,14 @@ export default function QuizFlow({ presetObjective }: { presetObjective?: Object
 
         {/* ── Resultado ─────────────────────────────────────────────────── */}
         {phase === 'result' && result && (
-          <QuizResultView result={result} name={name} />
+          <QuizResultView result={result} />
         )}
       </div>
     </div>
   )
 }
 
-function QuizResultView({ result, name }: { result: QuizResult; name: string }) {
+function QuizResultView({ result }: { result: QuizResult }) {
   const macro = (label: string, val: string, color: string) => (
     <div className="rounded-xl p-3 text-center border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)' }}>
       <div className="text-lg font-medium" style={{ color }}>{val}</div>
@@ -383,18 +428,21 @@ function QuizResultView({ result, name }: { result: QuizResult; name: string }) 
     <div>
       <div className="text-center mb-6">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium mb-3" style={{ backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
-          Plano personalizado
+          Prévia personalizada
         </div>
         <h1 className="text-2xl font-medium tracking-tight">{result.headline}</h1>
       </div>
 
       <p className="text-sm leading-relaxed mb-3" style={{ color: 'var(--color-text-muted)' }}>{result.diagnosis}</p>
       <p className="text-sm leading-relaxed mb-6" style={{ color: 'var(--color-text-muted)' }}>{result.painLine}</p>
+      <p className="text-xs leading-relaxed mb-5" style={{ color: 'var(--color-text-muted)' }}>
+        Esta é uma estimativa inicial baseada nas suas respostas, incluindo faixa de idade e disponibilidade para treinar. Confirme seus dados e atividade real no app para ajustar as metas.
+      </p>
 
       {/* Metas */}
       <div className="rounded-xl border p-4 mb-4" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)', borderRadius: 'var(--radius-card)' }}>
         <div className="flex items-baseline justify-between mb-3">
-          <span className="text-sm font-medium">Suas metas diárias</span>
+          <span className="text-sm font-medium">Estimativa de metas diárias</span>
           <span className="text-2xl font-medium" style={{ color: 'var(--color-primary)' }}>{result.calories}<span className="text-sm font-normal" style={{ color: 'var(--color-text-muted)' }}> kcal</span></span>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -432,14 +480,15 @@ function QuizResultView({ result, name }: { result: QuizResult; name: string }) 
       </p>
 
       <Link
-        href={`/login?tab=signup&nome=${encodeURIComponent(name.trim())}`}
+        href="/login?tab=signup&from=quiz"
+        onClick={() => track('clicked_cta', { source: 'quiz_result' })}
         className="block text-center py-4 rounded-xl text-white font-medium"
         style={{ backgroundColor: 'var(--color-primary)' }}
       >
         Desbloquear com 7 dias grátis
       </Link>
       <p className="text-xs text-center mt-3" style={{ color: 'var(--color-text-muted)' }}>
-        Acesso completo por 7 dias · cancele quando quiser
+        {PLANS.monthly.trialDays} dias grátis no mensal; depois R$ {PLANS.monthly.value.toFixed(2).replace('.', ',')}/mês. Cartão necessário para ativar o teste. Cancele antes do fim para não ser cobrado.
       </p>
     </div>
   )

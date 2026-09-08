@@ -1,11 +1,13 @@
 'use server'
 
 import { headers } from 'next/headers'
+import { after } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { enforceRateLimit } from '@/lib/ratelimit'
 import { sendCapiEvent } from '@/lib/analytics/capi'
 import { reportError } from '@/lib/monitoring'
 import { buildResult, type QuizAnswers, type QuizResult } from '@/lib/quiz/config'
+import { quizLeadSchema, validateQuizAnswers } from '@/lib/quiz/validation'
 
 export interface QuizUtms {
   utmSource?: string
@@ -14,13 +16,6 @@ export interface QuizUtms {
   utmContent?: string
   utmTerm?: string
   fbclid?: string
-}
-
-/** Normaliza o WhatsApp para dígitos com DDI 55 (Brasil) quando ausente. */
-function normalizePhone(raw: string): string {
-  let d = raw.replace(/\D/g, '')
-  if (d.length <= 11) d = '55' + d // sem DDI → assume Brasil
-  return d
 }
 
 /**
@@ -35,14 +30,13 @@ export async function submitQuizLead(params: {
   utms?: QuizUtms
   /** id do evento gerado no client, para deduplicar o Lead (Pixel + CAPI). */
   eventId?: string
-}): Promise<{ result?: QuizResult; error?: string }> {
-  const name = params.name?.trim()
-  const phoneDigits = (params.whatsapp ?? '').replace(/\D/g, '')
-
-  if (!name || name.length < 2) return { error: 'Informe seu nome.' }
-  if (phoneDigits.length < 10 || phoneDigits.length > 13) {
-    return { error: 'Informe um WhatsApp válido com DDD.' }
-  }
+}): Promise<{ result?: QuizResult; saved?: boolean; error?: string }> {
+  const parsed = quizLeadSchema.safeParse(params)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Confira os dados informados.' }
+  const checked = validateQuizAnswers(parsed.data.answers)
+  if (!checked.answers) return { error: checked.error }
+  const { name } = parsed.data
+  const answers = checked.answers
 
   // Rate-limit por IP — barra spam/bot antes de gravar e disparar conversão.
   const h = await headers()
@@ -50,8 +44,8 @@ export async function submitQuizLead(params: {
   const rl = await enforceRateLimit('quiz:lead', ip)
   if (!rl.allowed) return { error: rl.message }
 
-  const whatsapp = normalizePhone(params.whatsapp)
-  const objective = typeof params.answers.objective === 'string' ? params.answers.objective : null
+  const whatsapp = parsed.data.whatsapp!
+  const objective = answers.objective as string
 
   // Grava o lead (best-effort: se a tabela ainda não existe, não derruba o fluxo).
   let leadId: string | null = null
@@ -61,7 +55,7 @@ export async function submitQuizLead(params: {
         name,
         whatsapp,
         objective,
-        answers: params.answers as object,
+        answers: answers as object,
         utmSource: params.utms?.utmSource ?? null,
         utmMedium: params.utms?.utmMedium ?? null,
         utmCampaign: params.utms?.utmCampaign ?? null,
@@ -73,15 +67,15 @@ export async function submitQuizLead(params: {
     leadId = lead.id
   } catch (e) {
     reportError('quiz:saveLead', e, { objective })
-    // segue mesmo assim — não vamos perder a conversão por falha de gravação
+    // A prévia continua disponível, mas não contabilizamos um lead não salvo.
   }
 
   // Conversão: Lead server-side (CAPI). Usa o mesmo eventId do client → Meta dedup.
-  void sendCapiEvent({
+  if (leadId) after(() => sendCapiEvent({
     eventName: 'Lead',
     phone: whatsapp,
-    eventId: params.eventId ?? (leadId ? `lead:${leadId}` : `lead:${ip}:${Date.now()}`),
-  })
+    eventId: params.eventId ?? `lead:${leadId}`,
+  }))
 
-  return { result: buildResult(name, params.answers) }
+  return { result: buildResult(name, answers), saved: Boolean(leadId) }
 }

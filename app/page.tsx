@@ -63,9 +63,9 @@ export default function LandingPage() {
               <Link href="/login?tab=signup" className="inline-flex items-center justify-center text-sm px-6 py-3 rounded-lg text-white font-medium transition-opacity hover:opacity-90" style={{ backgroundColor: 'var(--color-primary)' }}>
                 Testar grátis por {monthly.trialDays} dias
               </Link>
-              <a href="#como-funciona" className="inline-flex items-center justify-center text-sm px-6 py-3 rounded-lg border transition-colors hover:bg-gray-50 dark:hover:bg-gray-900" style={{ borderColor: 'var(--color-border)' }}>
-                Ver como funciona
-              </a>
+              <Link href="/quiz" className="inline-flex items-center justify-center text-sm px-6 py-3 rounded-lg border transition-colors hover:bg-gray-50 dark:hover:bg-gray-900" style={{ borderColor: 'var(--color-border)' }}>
+                Descobrir meu plano · quiz gratuito
+              </Link>
             </div>
 
             <p className="text-xs mb-16" style={{ color: 'var(--color-text-muted)' }}>
