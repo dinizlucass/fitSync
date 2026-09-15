@@ -155,7 +155,7 @@ export default async function HojePage() {
       id: 'treino',
       title: 'Criar seu treino com IA',
       description: 'Programa personalizado em segundos',
-      href: '/app/treino/novo',
+      href: '/app/ia?tab=workout',
       cta: 'Criar',
       done: workouts.length > 0,
       icon: (
@@ -168,7 +168,7 @@ export default async function HojePage() {
       id: 'dieta',
       title: 'Montar sua dieta',
       description: 'Cardápio que bate suas metas',
-      href: '/app/dieta',
+      href: '/app/ia?tab=diet',
       cta: 'Montar',
       done: (dietTemplate?._count.meals ?? 0) > 0,
       icon: (
@@ -181,7 +181,7 @@ export default async function HojePage() {
       id: 'whatsapp',
       title: 'Conectar o WhatsApp',
       description: 'Registre treino e dieta pelo Sync 🤖',
-      href: '/app/configuracoes',
+      href: '/app/configuracoes#whatsapp',
       cta: 'Conectar',
       done: !!dbUser.phone,
       icon: (

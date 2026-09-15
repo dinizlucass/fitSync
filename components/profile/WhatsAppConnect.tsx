@@ -60,7 +60,7 @@ export default function WhatsAppConnect({ initialPhone }: { initialPhone: string
     : null
 
   return (
-    <div className="p-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
+    <div id="whatsapp" className="scroll-mt-4 p-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
       <div className="flex items-center gap-3 mb-1">
         <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#f0fdf4' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="#22c55e">
