@@ -498,11 +498,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Espaço para o CTA fixo do mobile não cobrir o rodapé */}
-      <div className="h-20 md:hidden" aria-hidden />
-
       {/* Footer */}
-      <footer className="py-8 border-t" style={{ borderColor: 'var(--color-border)' }}>
+      <footer
+        className="pt-8 pb-[calc(7rem+env(safe-area-inset-bottom))] border-t md:py-8"
+        style={{ borderColor: 'var(--color-border)' }}
+      >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <span className="text-base font-medium">
             <span className="text-black dark:text-white">Fit</span>
