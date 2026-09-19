@@ -71,7 +71,7 @@ export const TOOL_DEFINITIONS = [
     function: {
       name: 'get_treino_do_dia',
       description:
-        "Retorna APENAS o treino ativo do usuário (nome, exercícios, séries, reps e status). NUNCA lista todos os treinos. Use para 'qual o treino de hoje', 'o que treino hoje'.",
+        "Retorna os treinos já feitos hoje e o próximo treino sugerido pelo programa. Se já treinou hoje, não chame a sugestão de 'treino de hoje'. Use para 'qual o treino de hoje', 'o que treino hoje'.",
       parameters: {
         type: 'object',
         properties: {
@@ -164,10 +164,11 @@ export const TOOL_DEFINITIONS = [
     function: {
       name: 'registrar_treino',
       description:
-        'Registra um treino executado (exercícios, séries, reps, carga). Use quando o usuário relatar o que treinou. Pode registrar direto.',
+        'Registra um treino executado (exercícios, séries, reps, carga). Use quando o usuário relatar o que treinou. Pode registrar direto. Sem nome de treino do programa explicitamente informado, salva como treino avulso, sem marcar outro plano como feito.',
       parameters: {
         type: 'object',
         properties: {
+          treino: { type: 'string', description: 'Nome exato de um treino do programa, APENAS se o usuário disser que fez esse treino.' },
           exercicios: {
             type: 'array',
             items: {
@@ -183,6 +184,34 @@ export const TOOL_DEFINITIONS = [
           },
         },
         required: ['exercicios'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'salvar_treino_personalizado',
+      description: 'Salva um novo plano de treino quando o usuário pedir explicitamente para criar/montar um treino (ex: Hyrox express). Não registra como executado. Informe exercícios concretos; nunca diga que ficou pronto sem chamar esta função.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nome: { type: 'string', description: 'Nome claro do novo treino.' },
+          grupos_musculares: { type: 'array', items: { type: 'string' } },
+          exercicios: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                nome: { type: 'string' },
+                grupo_muscular: { type: 'string' },
+                series: { type: 'integer' },
+                repeticoes: { type: 'integer', description: 'Repetições por série. Para duração, descreva no nome (ex: corrida 5 minutos) e use 1.' },
+              },
+              required: ['nome', 'grupo_muscular', 'series', 'repeticoes'],
+            },
+          },
+        },
+        required: ['nome', 'grupos_musculares', 'exercicios'],
       },
     },
   },
@@ -238,7 +267,9 @@ export async function executeTool(name: string, args: ToolArgs, userId: string):
       case 'remover_refeicao_hoje':
         return await removerRefeicaoHoje(userId, args.refeicao as string)
       case 'registrar_treino':
-        return await registrarTreino(userId, (args.exercicios as Array<{ nome: string; series?: number; reps?: number; carga_kg?: number }>) ?? [])
+        return await registrarTreino(userId, (args.exercicios as Array<{ nome: string; series?: number; reps?: number; carga_kg?: number }>) ?? [], args.treino as string | undefined)
+      case 'salvar_treino_personalizado':
+        return await salvarTreinoPersonalizado(userId, args.nome as string, (args.grupos_musculares as string[]) ?? [], (args.exercicios as Array<{ nome: string; grupo_muscular: string; series: number; repeticoes: number }>) ?? [])
       case 'trocar_treino_do_dia':
         return await trocarTreino(userId, args.motivo as string | undefined, args.preferencia as string | undefined)
       case 'ajustar_plano_alimentar_restante':
@@ -304,28 +335,36 @@ async function getResumoNutricional(userId: string, data?: string): Promise<stri
 
 async function getTreinoDoDia(userId: string): Promise<string> {
   const { start, end } = dayRange()
+  const sessionsToday = await prisma.workoutSession.findMany({
+    where: { userId, date: { gte: start, lte: end } },
+    include: { workout: true, sets: { include: { exercise: true } } },
+    orderBy: { date: 'asc' },
+  })
+  const treinos_concluidos_hoje = sessionsToday.map(session => ({
+    nome: session.workout.name,
+    exercicios: [...new Set(session.sets.map(set => set.exercise.name))],
+  }))
   // Rotação do programa: sugere o treino menos recentemente feito
   const workout = await pickNextWorkout(userId)
 
   if (!workout) {
-    return JSON.stringify({ treino: null, aviso: 'Nenhum plano de treino cadastrado. Sugira gerar um no app (aba IA → Treino).' })
+    return JSON.stringify({ treinos_concluidos_hoje, proximo_treino: null, aviso: 'Nenhum plano de treino cadastrado. Sugira gerar um no app (aba IA → Treino).' })
   }
 
-  const sessionToday = await prisma.workoutSession.findFirst({
-    where: { userId, workoutId: workout.id, date: { gte: start, lte: end } },
-  })
-
   return JSON.stringify({
-    nome: workout.name,
-    grupos_musculares: workout.muscleGroups,
-    status: sessionToday ? 'concluido' : 'nao_iniciado',
-    exercicios: workout.exercises.map(e => ({
-      nome: e.exercise.name,
-      grupo: e.exercise.muscleGroup,
-      series: e.targetSets,
-      reps: e.targetReps,
-      equipamento: e.exercise.equipment ?? undefined,
-    })),
+    treinos_concluidos_hoje,
+    proximo_treino: {
+      nome: workout.name,
+      grupos_musculares: workout.muscleGroups,
+      status: sessionsToday.some(session => session.workoutId === workout.id) ? 'concluido' : 'nao_iniciado',
+      exercicios: workout.exercises.map(e => ({
+        nome: e.exercise.name,
+        grupo: e.exercise.muscleGroup,
+        series: e.targetSets,
+        reps: e.targetReps,
+        equipamento: e.exercise.equipment ?? undefined,
+      })),
+    },
   })
 }
 
@@ -449,13 +488,36 @@ async function removerRefeicaoHoje(userId: string, refeicao: string): Promise<st
 async function registrarTreino(
   userId: string,
   exercicios: Array<{ nome: string; series?: number; reps?: number; carga_kg?: number }>,
+  nomeTreino?: string,
 ): Promise<string> {
   if (!exercicios.length) return JSON.stringify({ erro: 'Nenhum exercício informado.' })
+  const nomes = exercicios.map(ex => ex.nome?.trim().toLocaleLowerCase('pt-BR')).filter(Boolean).sort()
+  if (nomes.length !== exercicios.length) return JSON.stringify({ erro: 'Exercício sem nome.' })
 
-  // Sessão precisa de um workout. Usa o mais recente ou cria um avulso.
-  let workout = await prisma.workout.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } })
+  // Uma confirmação como "marque como feito" não deve repetir a sessão que
+  // acabou de ser registrada na mesma conversa.
+  const { start, end } = dayRange()
+  const sessionsToday = await prisma.workoutSession.findMany({
+    where: { userId, date: { gte: start, lte: end } },
+    include: { workout: true, sets: { include: { exercise: true } } },
+  })
+  const duplicate = sessionsToday.find(session => {
+    if (nomeTreino && session.workout.name.toLocaleLowerCase('pt-BR') === nomeTreino.trim().toLocaleLowerCase('pt-BR')) return true
+    const registrados = [...new Set(session.sets.map(set => set.exercise.name.trim().toLocaleLowerCase('pt-BR')))].sort()
+    return registrados.length === nomes.length && registrados.every((name, index) => name === nomes[index])
+  })
+  if (duplicate) return JSON.stringify({ sucesso: true, ja_registrado: true, treino: duplicate.workout.name,
+    aviso: 'Este treino já consta como concluído hoje; não criei outra sessão.' })
+
+  // Nunca associe um relato livre ao último treino criado: isso marcava o
+  // plano errado como concluído e distorcia a rotação.
+  let workout = nomeTreino
+    ? await prisma.workout.findFirst({ where: { userId, archived: false, name: { equals: nomeTreino, mode: 'insensitive' } } })
+    : null
+  if (nomeTreino && !workout) return JSON.stringify({ erro: `Treino "${nomeTreino}" não encontrado no programa. Pergunte se deve registrar como treino avulso.` })
   if (!workout) {
-    workout = await prisma.workout.create({ data: { userId, name: 'Treino avulso', muscleGroups: [] } })
+    const descricao = exercicios.map(ex => ex.nome.trim()).filter(Boolean).slice(0, 2).join(' + ')
+    workout = await prisma.workout.create({ data: { userId, name: `Treino avulso — ${descricao || 'sem detalhes'}`, muscleGroups: [] } })
   }
 
   const sessionSets: Array<{ exerciseId: string; setNumber: number; weightKg: number | null; reps: number | null; isPersonalRecord: boolean }> = []
@@ -482,9 +544,53 @@ async function registrarTreino(
 
   return JSON.stringify({
     sucesso: true,
+    treino: workout.name,
     exercicios_registrados: exercicios.map(e => `${e.nome}${e.series ? ` ${e.series}x${e.reps ?? '?'}` : ''}${e.carga_kg ? ` ${e.carga_kg}kg` : ''}`),
     total_series: sessionSets.length,
   })
+}
+
+async function salvarTreinoPersonalizado(
+  userId: string,
+  nome: string,
+  grupos: string[],
+  exercicios: Array<{ nome: string; grupo_muscular: string; series: number; repeticoes: number }>,
+): Promise<string> {
+  const nomeLimpo = nome?.trim().slice(0, 100)
+  if (!nomeLimpo || exercicios.length < 2 || exercicios.length > 12) {
+    return JSON.stringify({ erro: 'Informe um nome e de 2 a 12 exercícios para salvar o treino.' })
+  }
+  const existentes = await prisma.workout.findMany({
+    where: { userId, archived: false, name: { equals: nomeLimpo, mode: 'insensitive' } },
+    include: { exercises: { include: { exercise: true }, orderBy: { order: 'asc' } } },
+  })
+  if (existentes.length) {
+    return JSON.stringify({ sucesso: true, ja_existia: true, nome: existentes[0].name,
+      exercicios: existentes[0].exercises.map(ex => ({ nome: ex.exercise.name, series: ex.targetSets, repeticoes: ex.targetReps })) })
+  }
+
+  const exerciseRecords = await Promise.all(exercicios.map(async ex => {
+    const exNome = ex.nome?.trim().slice(0, 120)
+    if (!exNome) throw new Error('Exercício sem nome')
+    let exercise = await prisma.exercise.findFirst({ where: { name: { equals: exNome, mode: 'insensitive' } } })
+    if (!exercise) exercise = await prisma.exercise.create({ data: { name: exNome, muscleGroup: ex.grupo_muscular?.trim() || 'Funcional' } })
+    return exercise
+  }))
+  const treino = await prisma.workout.create({
+    data: {
+      userId,
+      name: nomeLimpo,
+      muscleGroups: grupos.slice(0, 6),
+      exercises: { create: exerciseRecords.map((exercise, index) => ({
+        exerciseId: exercise.id,
+        targetSets: Math.max(1, Math.min(10, Math.round(exercicios[index].series || 1))),
+        targetReps: Math.max(1, Math.min(100, Math.round(exercicios[index].repeticoes || 1))),
+        order: index,
+      })) },
+    },
+  })
+  return JSON.stringify({ sucesso: true, nome: treino.name, salvo_no_app: true,
+    exercicios: exercicios.map(ex => ({ nome: ex.nome, series: ex.series, repeticoes: ex.repeticoes })) })
 }
 
 async function trocarTreino(userId: string, motivo?: string, preferencia?: string): Promise<string> {

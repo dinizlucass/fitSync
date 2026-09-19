@@ -28,6 +28,7 @@ export interface UserContext {
   }
   hoje: {
     data: string
+    treinos_concluidos: Array<{ nome: string; exercicios: string[] }>
     refeicoes_registradas: Array<{ nome: string; kcal: number; proteina_g: number }>
     consumido: { kcal: number; proteina_g: number; carbo_g: number; gordura_g: number }
     faltante: { kcal: number; proteina_g: number; carbo_g: number; gordura_g: number }
@@ -128,17 +129,26 @@ export async function buildUserContext(userId: string): Promise<UserContext> {
     gordura_g: metaFat != null ? round(metaFat - consumido.gordura_g) : 0,
   }
 
-  // ── Treino do dia (rotação: o menos recentemente feito do programa) ─
+  // Treinos feitos hoje são independentes da próxima sugestão da rotação.
+  // Um treino avulso não pode fazer o coach esquecer que o aluno já treinou.
+  const sessionsToday = await prisma.workoutSession.findMany({
+    where: { userId, date: { gte: start, lte: end } },
+    include: { workout: true, sets: { include: { exercise: true } } },
+    orderBy: { date: 'asc' },
+  })
+  const treinos_concluidos = sessionsToday.map(session => ({
+    nome: session.workout.name,
+    exercicios: [...new Set(session.sets.map(set => set.exercise.name))],
+  }))
+
+  // ── Próximo treino sugerido pela rotação do programa ──────────────
   const latestWorkout = await pickNextWorkout(userId)
 
   let treino_do_dia: UserContext['hoje']['treino_do_dia'] = null
   if (latestWorkout) {
-    const sessionToday = await prisma.workoutSession.findFirst({
-      where: { userId, workoutId: latestWorkout.id, date: { gte: start, lte: end } },
-    })
     treino_do_dia = {
       nome: latestWorkout.name,
-      status: sessionToday ? 'concluido' : 'nao_iniciado',
+      status: sessionsToday.some(session => session.workoutId === latestWorkout.id) ? 'concluido' : 'nao_iniciado',
       exercicios_resumo: latestWorkout.exercises.map(e => e.exercise.name).join(', '),
     }
   }
@@ -164,6 +174,7 @@ export async function buildUserContext(userId: string): Promise<UserContext> {
     },
     hoje: {
       data: dateStr,
+      treinos_concluidos,
       refeicoes_registradas,
       consumido: {
         kcal: round(consumido.kcal),
@@ -191,7 +202,8 @@ Hoje (${ctx.hoje.data}, agora são ${saoPauloTimeStr()} em São Paulo):
 - Refeições registradas: ${ctx.hoje.refeicoes_registradas.length > 0 ? ctx.hoje.refeicoes_registradas.map(r => `${r.nome} (${r.kcal}kcal, ${r.proteina_g}g prot)`).join('; ') : 'nenhuma ainda'}
 - Consumido: ${ctx.hoje.consumido.kcal} kcal | P:${ctx.hoje.consumido.proteina_g}g C:${ctx.hoje.consumido.carbo_g}g G:${ctx.hoje.consumido.gordura_g}g
 - Faltante p/ meta: ${semMeta ? '—' : `${ctx.hoje.faltante.kcal} kcal | P:${ctx.hoje.faltante.proteina_g}g C:${ctx.hoje.faltante.carbo_g}g G:${ctx.hoje.faltante.gordura_g}g`}
-- Treino do dia: ${ctx.hoje.treino_do_dia ? `${ctx.hoje.treino_do_dia.nome} (${ctx.hoje.treino_do_dia.status}) — ${ctx.hoje.treino_do_dia.exercicios_resumo}` : 'nenhum plano de treino cadastrado'}
+- Treinos já concluídos hoje: ${ctx.hoje.treinos_concluidos.length ? ctx.hoje.treinos_concluidos.map(t => `${t.nome} (${t.exercicios.join(', ') || 'sem detalhes'})`).join('; ') : 'nenhum'}
+- Próximo treino sugerido pelo programa (NÃO significa que ainda precisa treinar hoje): ${ctx.hoje.treino_do_dia ? `${ctx.hoje.treino_do_dia.nome} (${ctx.hoje.treino_do_dia.status}) — ${ctx.hoje.treino_do_dia.exercicios_resumo}` : 'nenhum plano de treino cadastrado'}
 
 Últimos 7 dias: ${ctx.ultimos_7_dias.treinos_feitos} treino(s) registrado(s).
 

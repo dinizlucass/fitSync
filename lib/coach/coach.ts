@@ -15,6 +15,7 @@ import { checkCoachRateLimit } from '@/lib/coach/rate-limit'
 import { enforceRateLimit } from '@/lib/ratelimit'
 import { reportError } from '@/lib/monitoring'
 import { canUsePremium, PREMIUM_REQUIRED } from '@/lib/premium-access'
+import { verifiedToolReply } from '@/lib/coach/verified-replies'
 
 const COACH_MODEL = 'gpt-4.1-mini'
 const MAX_TOOL_ROUNDS = 3
@@ -70,6 +71,8 @@ export async function runCoach({ userId, message, channel = 'whatsapp' }: RunCoa
 
   // 2. Loop de function calling
   let finalText = ''
+  let verifiedReply: string | null = null
+  let verifiedReplyPriority = 0
   const openai = getOpenAI()
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -101,6 +104,12 @@ export async function runCoach({ userId, message, channel = 'whatsapp' }: RunCoa
       }
       const result = await executeTool(call.function.name, args, userId)
       messages.push({ role: 'tool', tool_call_id: call.id, content: result })
+      const reply = verifiedToolReply(call.function.name, result, message)
+      const priority = call.function.name === 'get_treino_do_dia' ? 1 : 2
+      if (reply && priority >= verifiedReplyPriority) {
+        verifiedReply = reply
+        verifiedReplyPriority = priority
+      }
     }
 
     // Se foi a última rodada e ainda há tool calls, pede uma resposta final sem tools
@@ -117,6 +126,9 @@ export async function runCoach({ userId, message, channel = 'whatsapp' }: RunCoa
   if (!finalText.trim()) {
     finalText = 'Deu um probleminha aqui pra processar isso. Manda de novo?'
   }
+  // A LLM pode inventar detalhes no texto final apesar de a tool ter salvo
+  // corretamente. Confirmações e consultas de treino usam só dados verificados.
+  if (verifiedReply) finalText = verifiedReply
 
   // 3. Persiste o turno na memória (best-effort)
   try {
