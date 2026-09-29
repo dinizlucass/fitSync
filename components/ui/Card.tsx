@@ -1,15 +1,13 @@
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
-interface CardProps {
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode
-  className?: string
   padding?: boolean
   hover?: boolean
-  onClick?: () => void
 }
 
-export default function Card({ children, className, padding = true, hover = false, onClick }: CardProps) {
+export default function Card({ children, className, padding = true, hover = false, onClick, style, ...props }: CardProps) {
   return (
     <div
       onClick={onClick}
@@ -22,10 +20,12 @@ export default function Card({ children, className, padding = true, hover = fals
         )
       )}
       style={{
+        ...style,
         backgroundColor: 'var(--color-background)',
         borderColor: 'var(--color-border)',
         borderRadius: 'var(--radius-card)',
       }}
+      {...props}
     >
       {children}
     </div>

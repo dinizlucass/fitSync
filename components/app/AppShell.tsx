@@ -65,7 +65,7 @@ const navItems = [
   },
 ]
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({ children, professionalAccess = false }: { children: React.ReactNode; professionalAccess?: boolean }) {
   const pathname = usePathname()
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
@@ -119,6 +119,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* User + logout */}
         <div className="px-3 py-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
+          {professionalAccess && <Link href="/pro" className="mb-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold" style={{ borderColor: 'var(--color-border)', color: 'var(--color-primary)' }}>Área profissional</Link>}
           <div className="flex items-center gap-3 px-3 py-2 mb-1">
             <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium" style={{ backgroundColor: 'var(--color-primary)' }}>
               {(user?.user_metadata?.name?.[0] ?? user?.email?.[0])?.toUpperCase() ?? 'U'}

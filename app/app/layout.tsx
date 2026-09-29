@@ -5,8 +5,10 @@ import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { hasActiveSubscription } from '@/app/actions/subscription'
 import { isAdminEmail } from '@/lib/admin'
+import { getProfessionalContext } from '@/lib/professional'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const professionalAccess = Boolean(await getProfessionalContext())
   // Gate de assinatura — só roda quando explicitamente ligado (flag desligada por padrão)
   if (SUBSCRIPTION_ENFORCED) {
     const supabase = await createClient()
@@ -16,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } }).catch(() => null)
       if (dbUser && !(await hasActiveSubscription(dbUser.id))) {
         return (
-          <AppShell>
+          <AppShell professionalAccess={professionalAccess}>
             <SubscriptionGate />
           </AppShell>
         )
@@ -24,5 +26,5 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
   }
 
-  return <AppShell>{children}</AppShell>
+  return <AppShell professionalAccess={professionalAccess}>{children}</AppShell>
 }

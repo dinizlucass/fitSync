@@ -1,7 +1,7 @@
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
-type Variant = 'primary' | 'outline' | 'ghost'
+type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger'
 type Size = 'sm' | 'md' | 'lg'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -13,8 +13,10 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<Variant, React.CSSProperties> = {
   primary: { backgroundColor: 'var(--color-primary)', color: 'white' },
+  secondary: { backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)' },
   outline: { backgroundColor: 'transparent', border: '1px solid var(--color-border)' },
   ghost: { backgroundColor: 'transparent' },
+  danger: { backgroundColor: 'var(--color-alert)', color: 'white' },
 }
 
 const sizeClasses: Record<Size, string> = {

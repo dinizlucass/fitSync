@@ -62,7 +62,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (!user && pathname.startsWith('/app')) {
+  if (!user && (pathname.startsWith('/app') || pathname.startsWith('/pro'))) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

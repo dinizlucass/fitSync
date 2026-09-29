@@ -134,8 +134,8 @@ export async function runCoach({ userId, message, channel = 'whatsapp' }: RunCoa
   try {
     await prisma.chatMessage.createMany({
       data: [
-        { userId, role: 'user', content: message, channel },
-        { userId, role: 'assistant', content: finalText, channel },
+        { userId, role: 'user', content: message, channel, direction: 'INBOUND', status: 'RECEIVED' },
+        { userId, role: 'assistant', content: finalText, channel, direction: 'OUTBOUND', status: channel === 'whatsapp' ? 'SENT' : 'DELIVERED' },
       ],
     })
   } catch (e) {

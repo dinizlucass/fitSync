@@ -9,6 +9,7 @@ import { dayRange } from '@/lib/coach/shared'
 import { checkCoachRateLimit } from '@/lib/coach/rate-limit'
 import { enforceRateLimit, once, release } from '@/lib/ratelimit'
 import { reportError } from '@/lib/monitoring'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * Verifica a assinatura HMAC-SHA256 do corpo bruto contra o header
@@ -57,6 +58,21 @@ export async function POST(request: NextRequest) {
     const entry = body.entry?.[0]
     const changes = entry?.changes?.[0]
     const value = changes?.value
+
+    // Confirmações de entrega não carregam `messages`; atualize pelo wamid.
+    if (value?.statuses?.length) {
+      for (const update of value.statuses as Array<{ id?: string; status?: string; errors?: Array<{ title?: string; message?: string }> }>) {
+        if (!update.id || !['sent', 'delivered', 'read', 'failed'].includes(update.status ?? '')) continue
+        await prisma.chatMessage.updateMany({
+          where: { metaMessageId: update.id },
+          data: {
+            status: update.status!.toUpperCase() as 'SENT' | 'DELIVERED' | 'READ' | 'FAILED',
+            errorMessage: update.status === 'failed' ? (update.errors?.[0]?.message ?? update.errors?.[0]?.title ?? 'Falha de entrega') : null,
+          },
+        })
+      }
+      return Response.json({ status: 'message_status_updated' })
+    }
 
     if (!value?.messages?.length) {
       return Response.json({ status: 'no_messages' })
@@ -136,6 +152,21 @@ export async function POST(request: NextRequest) {
       return Response.json({ status: 'user_not_found' })
     }
 
+    // Enquanto um profissional conduz a conversa, a IA não responde. A mensagem
+    // continua registrada para aparecer no prontuário e abrir a janela de 24h.
+    const handoff = await prisma.careConversation.findUnique({ where: { patientId: user.id } }).catch(() => null)
+    if (handoff?.humanModeUntil && handoff.humanModeUntil > new Date()) {
+      await prisma.chatMessage.create({
+        data: {
+          userId: user.id,
+          role: 'user',
+          content: messageType === 'text' ? String(message.text?.body ?? '') : '[Mídia recebida durante atendimento humano]',
+          channel: 'whatsapp', direction: 'INBOUND', status: 'RECEIVED', metaMessageId: messageId,
+        },
+      })
+      return Response.json({ status: 'human_handoff_active' })
+    }
+
     if (messageType === 'text') {
       const text = message.text.body as string
 
@@ -143,7 +174,9 @@ export async function POST(request: NextRequest) {
       // age (registra/ajusta) e responde no estilo WhatsApp.
       try {
         const reply = await runCoach({ userId: user.id, message: text, channel: 'whatsapp' })
-        await sendWhatsAppMessage(from, reply)
+        const outboundId = await sendWhatsAppMessage(from, reply)
+        const savedReply = await prisma.chatMessage.findFirst({ where: { userId: user.id, role: 'assistant', content: reply, metaMessageId: null }, orderBy: { createdAt: 'desc' } })
+        if (savedReply) await prisma.chatMessage.update({ where: { id: savedReply.id }, data: { metaMessageId: outboundId, direction: 'OUTBOUND', status: 'SENT' } })
       } catch (e) {
         reportError('whatsapp:coach', e, { userId: user.id })
         await sendWhatsAppMessage(from, 'Deu um probleminha aqui pra processar sua mensagem. Tenta de novo daqui a pouco? 🙏')
@@ -164,6 +197,13 @@ export async function POST(request: NextRequest) {
       try {
         const mediaId = message.image.id as string
         const mediaBuffer = await downloadMetaMedia(mediaId)
+
+        // Guarda o original em bucket privado; falha de Storage não impede a análise.
+        const extension = String(message.image.mime_type ?? 'image/jpeg').split('/')[1]?.replace('jpeg', 'jpg') || 'jpg'
+        const photoPath = `${user.id}/${Date.now()}-${messageId ?? mediaId}.${extension}`
+        const upload = await createAdminClient().storage.from('meal-photos').upload(photoPath, mediaBuffer, {
+          contentType: message.image.mime_type ?? 'image/jpeg', upsert: false,
+        })
 
         // Convert to base64 data URL for OpenAI
         const base64 = mediaBuffer.toString('base64')
@@ -196,8 +236,10 @@ export async function POST(request: NextRequest) {
 
         if (!mealLog) {
           mealLog = await prisma.mealLog.create({
-            data: { userId: user.id, date: start, mealType },
+            data: { userId: user.id, date: start, mealType, source: 'WHATSAPP', photoPath: upload.error ? null : photoPath },
           })
+        } else if (!upload.error) {
+          mealLog = await prisma.mealLog.update({ where: { id: mealLog.id }, data: { source: 'WHATSAPP', photoPath } })
         }
 
         for (const item of parsed.items) {
@@ -226,15 +268,13 @@ export async function POST(request: NextRequest) {
         reply += `\n*Total: ${Math.round(parsed.totalCalories)} kcal*\n`
         reply += `P: ${Math.round(parsed.totalProteinG)}g · C: ${Math.round(parsed.totalCarbsG)}g · G: ${Math.round(parsed.totalFatG)}g`
 
-        await sendWhatsAppMessage(from, reply)
+        const outboundId = await sendWhatsAppMessage(from, reply)
 
         // Registra o turno na memória do coach (continuidade + contagem do rate limit)
-        await prisma.chatMessage.createMany({
-          data: [
-            { userId: user.id, role: 'user', content: '[Foto de refeição enviada]', channel: 'whatsapp' },
-            { userId: user.id, role: 'assistant', content: reply, channel: 'whatsapp' },
-          ],
-        }).catch(() => {})
+        await prisma.chatMessage.createMany({ data: [
+          { userId: user.id, role: 'user', content: '[Foto de refeição enviada]', channel: 'whatsapp', direction: 'INBOUND', status: 'RECEIVED' },
+          { userId: user.id, role: 'assistant', content: reply, channel: 'whatsapp', direction: 'OUTBOUND', status: 'SENT', metaMessageId: outboundId },
+        ] }).catch(() => {})
       } catch (e) {
         reportError('whatsapp:imagem', e, { userId: user.id })
         await sendWhatsAppMessage(from, '❌ Não consegui analisar a imagem. Tente enviar uma foto mais clara.')

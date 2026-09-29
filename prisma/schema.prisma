@@ -31,6 +31,65 @@ enum MealType {
   CEIA
 }
 
+enum ProfessionalRole {
+  OWNER
+  NUTRITIONIST
+  TRAINER
+}
+
+enum AssignmentScope {
+  NUTRITION
+  TRAINING
+  CLINICAL
+  MESSAGING
+  NOTES
+}
+
+enum NoteVisibility {
+  PRIVATE
+  CARE_TEAM
+  PATIENT
+}
+
+enum PlanStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MealLogSource {
+  APP
+  WHATSAPP
+  PROFESSIONAL
+}
+
+enum ReviewStatus {
+  PENDING
+  REVIEWED
+  NEEDS_ATTENTION
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  DRAFT
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  RECEIVED
+}
+
+enum ExamStatus {
+  REQUESTED
+  COLLECTED
+  REVIEWED
+}
+
 model User {
   id                   String    @id @default(cuid())
   supabaseId           String    @unique
@@ -42,14 +101,38 @@ model User {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  profile         Profile?
-  workouts        Workout[]
-  workoutSessions WorkoutSession[]
-  mealLogs        MealLog[]
-  weightLogs      WeightLog[]
-  dietTemplate    DietTemplate?
-  chatMessages    ChatMessage[]
-  subscription    Subscription?
+  profile                    Profile?
+  workouts                   Workout[]             @relation("PatientWorkouts")
+  authoredWorkouts           Workout[]             @relation("WorkoutAuthor")
+  workoutSessions            WorkoutSession[]
+  mealLogs                   MealLog[]
+  weightLogs                 WeightLog[]
+  dietTemplate               DietTemplate?
+  chatMessages               ChatMessage[]
+  subscription               Subscription?
+  practiceMemberships        PracticeMember[]
+  patientAssignments         PatientAssignment[]   @relation("PatientAssignments")
+  professionalAssignments    PatientAssignment[]   @relation("ProfessionalAssignments")
+  authoredDietVersions       DietPlanVersion[]     @relation("DietVersionAuthor")
+  authoredNotes              ProfessionalNote[]    @relation("NoteAuthor")
+  recordedMeasurements       ProgressMeasurement[] @relation("MeasurementRecorder")
+  recordedPhotos             ProgressPhoto[]       @relation("PhotoRecorder")
+  requestedExams             ExamRequest[]         @relation("ExamRequester")
+  uploadedDocuments          ClinicalDocument[]    @relation("DocumentUploader")
+  authoredMessages           ChatMessage[]         @relation("ProfessionalMessageAuthor")
+  auditLogs                  ClinicalAuditLog[]    @relation("AuditActor")
+  appointmentsAsProfessional Appointment[]         @relation("AppointmentProfessional")
+  goalsAuthored              SharedGoal[]          @relation("GoalAuthor")
+  dietPlan                   DietPlan?
+  progressMeasurements       ProgressMeasurement[] @relation("PatientMeasurements")
+  progressPhotos             ProgressPhoto[]       @relation("PatientPhotos")
+  examCollections            ExamCollection[]
+  examRequests               ExamRequest[]         @relation("PatientExamRequests")
+  clinicalDocuments          ClinicalDocument[]    @relation("PatientDocuments")
+  professionalNotes          ProfessionalNote[]    @relation("PatientNotes")
+  appointments               Appointment[]         @relation("PatientAppointments")
+  sharedGoals                SharedGoal[]          @relation("PatientGoals")
+  careConversation           CareConversation?
 
   @@map("users")
 }
@@ -58,11 +141,11 @@ model Subscription {
   id                  String    @id @default(cuid())
   userId              String    @unique
   user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan                String                          // 'monthly' | 'annual'
-  status              String    @default("PENDING")   // PENDING | TRIALING | ACTIVE | PAST_DUE | CANCELED | EXPIRED
+  plan                String // 'monthly' | 'annual'
+  status              String    @default("PENDING") // PENDING | TRIALING | ACTIVE | PAST_DUE | CANCELED | EXPIRED
   billingType         String    @default("UNDEFINED")
   value               Float
-  cycle               String                          // MONTHLY | YEARLY
+  cycle               String // MONTHLY | YEARLY
   cpfCnpj             String?
   asaasCustomerId     String?
   asaasSubscriptionId String?   @unique
@@ -96,13 +179,20 @@ model QuizLead {
 }
 
 model ChatMessage {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role      String   // 'user' | 'assistant'
-  content   String
-  channel   String   @default("whatsapp") // 'whatsapp' | 'app'
-  createdAt DateTime @default(now())
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String // 'user' | 'assistant'
+  content        String
+  channel        String           @default("whatsapp") // 'whatsapp' | 'app'
+  direction      MessageDirection @default(INBOUND)
+  status         MessageStatus    @default(RECEIVED)
+  professionalId String?
+  professional   User?            @relation("ProfessionalMessageAuthor", fields: [professionalId], references: [id], onDelete: SetNull)
+  metaMessageId  String?          @unique
+  templateName   String?
+  errorMessage   String?
+  createdAt      DateTime         @default(now())
 
   @@index([userId, createdAt])
   @@map("chat_messages")
@@ -130,14 +220,18 @@ model Profile {
 }
 
 model Workout {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name         String
-  muscleGroups String[]
-  archived     Boolean  @default(false) // programas antigos saem da lista sem perder histórico
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation("PatientWorkouts", fields: [userId], references: [id], onDelete: Cascade)
+  name              String
+  muscleGroups      String[]
+  archived          Boolean  @default(false) // programas antigos saem da lista sem perder histórico
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  authoredById      String?
+  authoredBy        User?    @relation("WorkoutAuthor", fields: [authoredById], references: [id], onDelete: SetNull)
+  scheduledWeekdays Int[]    @default([])
+  changeNote        String?
 
   exercises WorkoutExercise[]
   sessions  WorkoutSession[]
@@ -174,15 +268,17 @@ model WorkoutExercise {
 }
 
 model WorkoutSession {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workoutId String
-  workout   Workout  @relation(fields: [workoutId], references: [id])
-  notes     String?
-  duration  Int?
-  date      DateTime @default(now())
-  createdAt DateTime @default(now())
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutId       String
+  workout         Workout  @relation(fields: [workoutId], references: [id])
+  notes           String?
+  duration        Int?
+  date            DateTime @default(now())
+  createdAt       DateTime @default(now())
+  rpe             Int?
+  patientFeedback String?
 
   sets SessionSet[]
 
@@ -199,6 +295,7 @@ model SessionSet {
   weightKg         Float?
   reps             Int?
   isPersonalRecord Boolean        @default(false)
+  rpe              Int?
   createdAt        DateTime       @default(now())
 
   @@map("session_sets")
@@ -219,6 +316,7 @@ model Food {
 
   mealItems         MealItem[]
   dietTemplateItems DietTemplateMealItem[]
+  dietPlanItems     DietPlanItem[]
 
   @@unique([name])
   @@map("foods")
@@ -262,13 +360,17 @@ model DietTemplateMealItem {
 }
 
 model MealLog {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date      DateTime
-  mealType  MealType
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date         DateTime
+  mealType     MealType
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  source       MealLogSource @default(APP)
+  note         String?
+  photoPath    String?
+  reviewStatus ReviewStatus  @default(PENDING)
 
   items MealItem[]
 
@@ -276,11 +378,11 @@ model MealLog {
 }
 
 model MealItem {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   mealLogId String
-  mealLog   MealLog @relation(fields: [mealLogId], references: [id], onDelete: Cascade)
+  mealLog   MealLog  @relation(fields: [mealLogId], references: [id], onDelete: Cascade)
   foodId    String
-  food      Food    @relation(fields: [foodId], references: [id])
+  food      Food     @relation(fields: [foodId], references: [id])
   quantityG Float
   createdAt DateTime @default(now())
 
@@ -297,4 +399,301 @@ model WeightLog {
   createdAt DateTime @default(now())
 
   @@map("weight_logs")
+}
+
+model Practice {
+  id          String              @id @default(cuid())
+  name        String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  members     PracticeMember[]
+  assignments PatientAssignment[]
+  auditLogs   ClinicalAuditLog[]
+
+  @@map("practices")
+}
+
+model PracticeMember {
+  id         String           @id @default(cuid())
+  practiceId String
+  practice   Practice         @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       ProfessionalRole
+  active     Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+
+  @@unique([practiceId, userId])
+  @@index([userId, active])
+  @@map("practice_members")
+}
+
+model PatientAssignment {
+  id             String            @id @default(cuid())
+  practiceId     String
+  practice       Practice          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patientId      String
+  patient        User              @relation("PatientAssignments", fields: [patientId], references: [id], onDelete: Cascade)
+  professionalId String
+  professional   User              @relation("ProfessionalAssignments", fields: [professionalId], references: [id], onDelete: Cascade)
+  scopes         AssignmentScope[]
+  active         Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([practiceId, patientId, professionalId])
+  @@index([professionalId, active, patientId])
+  @@index([patientId, active])
+  @@map("patient_assignments")
+}
+
+model ClinicalAuditLog {
+  id         String   @id @default(cuid())
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  actorId    String
+  actor      User     @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+  patientId  String
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([patientId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("clinical_audit_logs")
+}
+
+model ProgressMeasurement {
+  id           String   @id @default(cuid())
+  patientId    String
+  patient      User     @relation("PatientMeasurements", fields: [patientId], references: [id], onDelete: Cascade)
+  recordedById String?
+  recordedBy   User?    @relation("MeasurementRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+  date         DateTime @default(now())
+  bodyFatPct   Float?
+  waistCm      Float?
+  hipCm        Float?
+  chestCm      Float?
+  armCm        Float?
+  thighCm      Float?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@index([patientId, date])
+  @@map("progress_measurements")
+}
+
+model ProgressPhoto {
+  id           String   @id @default(cuid())
+  patientId    String
+  patient      User     @relation("PatientPhotos", fields: [patientId], references: [id], onDelete: Cascade)
+  recordedById String?
+  recordedBy   User?    @relation("PhotoRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+  storagePath  String
+  angle        String
+  date         DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([patientId, date])
+  @@map("progress_photos")
+}
+
+model DietPlan {
+  id              String            @id @default(cuid())
+  patientId       String            @unique
+  patient         User              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  activeVersionId String?           @unique
+  activeVersion   DietPlanVersion?  @relation("ActiveDietVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  versions        DietPlanVersion[] @relation("DietVersions")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@map("diet_plans")
+}
+
+model DietPlanVersion {
+  id           String         @id @default(cuid())
+  planId       String
+  plan         DietPlan       @relation("DietVersions", fields: [planId], references: [id], onDelete: Cascade)
+  activeFor    DietPlan?      @relation("ActiveDietVersion")
+  version      Int
+  status       PlanStatus     @default(DRAFT)
+  title        String         @default("Plano alimentar")
+  calorieGoal  Int
+  proteinGoalG Float
+  carbsGoalG   Float
+  fatGoalG     Float
+  notes        String?
+  authoredById String?
+  authoredBy   User?          @relation("DietVersionAuthor", fields: [authoredById], references: [id], onDelete: SetNull)
+  publishedAt  DateTime?
+  createdAt    DateTime       @default(now())
+  meals        DietPlanMeal[]
+
+  @@unique([planId, version])
+  @@index([planId, status])
+  @@map("diet_plan_versions")
+}
+
+model DietPlanMeal {
+  id        String          @id @default(cuid())
+  versionId String
+  version   DietPlanVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  mealType  MealType
+  name      String
+  time      String?
+  order     Int             @default(0)
+  items     DietPlanItem[]
+
+  @@index([versionId, order])
+  @@map("diet_plan_meals")
+}
+
+model DietPlanItem {
+  id            String       @id @default(cuid())
+  mealId        String
+  meal          DietPlanMeal @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  foodId        String?
+  food          Food?        @relation(fields: [foodId], references: [id], onDelete: SetNull)
+  name          String
+  quantityG     Float
+  calories      Float
+  proteinG      Float        @default(0)
+  carbsG        Float        @default(0)
+  fatG          Float        @default(0)
+  substitutions Json?
+  order         Int          @default(0)
+
+  @@index([mealId, order])
+  @@map("diet_plan_items")
+}
+
+model ExamCollection {
+  id          String             @id @default(cuid())
+  patientId   String
+  patient     User               @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  collectedAt DateTime
+  laboratory  String?
+  status      ExamStatus         @default(COLLECTED)
+  notes       String?
+  createdAt   DateTime           @default(now())
+  results     ExamResult[]
+  documents   ClinicalDocument[]
+
+  @@index([patientId, collectedAt])
+  @@map("exam_collections")
+}
+
+model ExamResult {
+  id           String         @id @default(cuid())
+  collectionId String
+  collection   ExamCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  marker       String
+  value        Float?
+  textValue    String?
+  unit         String?
+  referenceMin Float?
+  referenceMax Float?
+  outOfRange   Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+
+  @@index([collectionId, marker])
+  @@map("exam_results")
+}
+
+model ExamRequest {
+  id            String     @id @default(cuid())
+  patientId     String
+  patient       User       @relation("PatientExamRequests", fields: [patientId], references: [id], onDelete: Cascade)
+  requestedById String
+  requestedBy   User       @relation("ExamRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  title         String
+  instructions  String?
+  dueDate       DateTime?
+  status        ExamStatus @default(REQUESTED)
+  createdAt     DateTime   @default(now())
+
+  @@index([patientId, status])
+  @@map("exam_requests")
+}
+
+model ClinicalDocument {
+  id           String          @id @default(cuid())
+  patientId    String
+  patient      User            @relation("PatientDocuments", fields: [patientId], references: [id], onDelete: Cascade)
+  collectionId String?
+  collection   ExamCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  uploadedById String?
+  uploadedBy   User?           @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  storagePath  String
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  createdAt    DateTime        @default(now())
+
+  @@index([patientId, createdAt])
+  @@map("clinical_documents")
+}
+
+model ProfessionalNote {
+  id         String         @id @default(cuid())
+  patientId  String
+  patient    User           @relation("PatientNotes", fields: [patientId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User           @relation("NoteAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  title      String?
+  content    String
+  visibility NoteVisibility @default(PRIVATE)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([patientId, createdAt])
+  @@map("professional_notes")
+}
+
+model Appointment {
+  id             String   @id @default(cuid())
+  patientId      String
+  patient        User     @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Cascade)
+  professionalId String
+  professional   User     @relation("AppointmentProfessional", fields: [professionalId], references: [id], onDelete: Restrict)
+  scheduledAt    DateTime
+  durationMin    Int      @default(50)
+  status         String   @default("SCHEDULED")
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  @@index([patientId, scheduledAt])
+  @@index([professionalId, scheduledAt])
+  @@map("appointments")
+}
+
+model SharedGoal {
+  id           String    @id @default(cuid())
+  patientId    String
+  patient      User      @relation("PatientGoals", fields: [patientId], references: [id], onDelete: Cascade)
+  authoredById String
+  authoredBy   User      @relation("GoalAuthor", fields: [authoredById], references: [id], onDelete: Restrict)
+  title        String
+  targetValue  Float?
+  unit         String?
+  targetDate   DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([patientId, completedAt])
+  @@map("shared_goals")
+}
+
+model CareConversation {
+  id             String    @id @default(cuid())
+  patientId      String    @unique
+  patient        User      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  humanModeUntil DateTime?
+  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+
+  @@map("care_conversations")
 }

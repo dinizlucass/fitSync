@@ -136,6 +136,13 @@ export default async function HojePage() {
     include: { _count: { select: { meals: true } } },
   }).catch(() => null)
 
+  const sharedNotes = await prisma.professionalNote.findMany({
+    where: { patientId: dbUser.id, visibility: 'PATIENT' },
+    orderBy: { createdAt: 'desc' },
+    take: 3,
+    include: { author: { select: { name: true } } },
+  }).catch(() => [])
+
   const iconStroke = { fill: 'none' as const, stroke: 'currentColor', strokeWidth: 2 }
   const onboardingSteps: OnboardingStep[] = [
     {
@@ -246,6 +253,8 @@ export default async function HojePage() {
       </div>
 
       {!onboardingComplete && <OnboardingChecklist steps={onboardingSteps} />}
+
+      {sharedNotes.length > 0 && <section className="mb-5 rounded-xl border p-4" style={{ backgroundColor: 'var(--color-background)', borderColor: 'var(--color-border)' }}><h2 className="text-sm font-semibold">Orientações da sua equipe</h2><div className="mt-3 space-y-3">{sharedNotes.map((note) => <article key={note.id} className="border-l-2 pl-3" style={{ borderColor: 'var(--color-primary)' }}><p className="text-sm font-medium">{note.title ?? 'Nova orientação'}</p><p className="mt-1 whitespace-pre-wrap text-sm" style={{ color: 'var(--color-text-muted)' }}>{note.content}</p><p className="mt-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>{note.author.name ?? 'Equipe FitSync'}</p></article>)}</div></section>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Calorie ring card */}

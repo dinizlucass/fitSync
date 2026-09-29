@@ -3,7 +3,9 @@ const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0'
 /**
  * Send a WhatsApp text message via Meta Graph API.
  */
-export async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
+type WhatsAppSendResponse = { messages?: Array<{ id: string }> }
+
+export async function sendWhatsAppMessage(to: string, text: string): Promise<string> {
   const phoneId = process.env.META_WHATSAPP_PHONE_ID
   const token = process.env.META_WHATSAPP_TOKEN
 
@@ -33,6 +35,37 @@ export async function sendWhatsAppMessage(to: string, text: string): Promise<voi
     const error = await response.text()
     throw new Error(`WhatsApp API error: ${error}`)
   }
+
+  const payload = await response.json() as WhatsAppSendResponse
+  const messageId = payload.messages?.[0]?.id
+  if (!messageId) throw new Error('WhatsApp API did not return a message id')
+  return messageId
+}
+
+/** Envia o template utilitário aprovado para retornos profissionais fora da janela de 24h. */
+export async function sendWhatsAppTemplate(to: string, bodyText: string): Promise<string> {
+  const phoneId = process.env.META_WHATSAPP_PHONE_ID
+  const token = process.env.META_WHATSAPP_TOKEN
+  const templateName = process.env.META_PROFESSIONAL_TEMPLATE_NAME
+  if (!phoneId || !token || !templateName) throw new Error('WhatsApp professional template not configured')
+
+  const response = await fetch(`${WHATSAPP_API_URL}/${phoneId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'template',
+      template: {
+        name: templateName,
+        language: { code: 'pt_BR' },
+        components: [{ type: 'body', parameters: [{ type: 'text', text: bodyText }] }],
+      },
+    }),
+  })
+  if (!response.ok) throw new Error(`WhatsApp API error: ${await response.text()}`)
+  const payload = await response.json() as WhatsAppSendResponse
+  const messageId = payload.messages?.[0]?.id
+  if (!messageId) throw new Error('WhatsApp API did not return a message id')
+  return messageId
 }
 
 /**
