@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { endOfDay, format, startOfDay, subDays } from 'date-fns'
+import { format } from 'date-fns'
 
 type FoodSource = {
   id: string
@@ -40,13 +40,11 @@ export async function GET(request: NextRequest) {
   })
   if (!dbUser) return Response.json({ error: 'Not found' }, { status: 404 })
 
-  const rangeStart = startOfDay(subDays(date, 29))
-  const rangeEnd = endOfDay(date)
   const weekday = date.getDay()
 
   const [logs, template, scheduledWorkout] = await Promise.all([
     prisma.mealLog.findMany({
-      where: { userId: dbUser.id, date: { gte: rangeStart, lte: rangeEnd } },
+      where: { userId: dbUser.id },
       orderBy: { date: 'desc' },
       include: { items: { include: { food: true } } },
     }),

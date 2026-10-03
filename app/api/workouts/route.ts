@@ -9,10 +9,6 @@ export async function GET() {
   const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
   if (!dbUser) return Response.json({ error: 'Not found' }, { status: 404 })
 
-  const twelveWeeksAgo = new Date()
-  twelveWeeksAgo.setHours(0, 0, 0, 0)
-  twelveWeeksAgo.setDate(twelveWeeksAgo.getDate() - 84)
-
   const [workouts, recentSessions] = await Promise.all([
     prisma.workout.findMany({
       where: { userId: dbUser.id },
@@ -30,9 +26,8 @@ export async function GET() {
       },
     }).catch(() => []),
     prisma.workoutSession.findMany({
-      where: { userId: dbUser.id, date: { gte: twelveWeeksAgo } },
+      where: { userId: dbUser.id },
       orderBy: { date: 'desc' },
-      take: 100,
       include: {
         workout: { select: { id: true, name: true, archived: true } },
         sets: {

@@ -127,6 +127,7 @@ export default function TreinoPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('today')
   const [historyFilter, setHistoryFilter] = useState('all')
+  const [historyLimit, setHistoryLimit] = useState(20)
   const [openSession, setOpenSession] = useState<string | null>(null)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [pendingWorkout, setPendingWorkout] = useState<string | null>(null)
@@ -234,6 +235,7 @@ export default function TreinoPage() {
     if (historyFilter === 'all') return data.recentSessions
     return data.recentSessions.filter((session) => session.workoutId === historyFilter)
   }, [data.recentSessions, historyFilter])
+  const visibleSessions = filteredSessions.slice(0, historyLimit)
 
   const heatmap = useMemo(() => {
     const active = new Set(data.recentSessions.map(session => localDateKey(session.date)))
@@ -282,7 +284,7 @@ export default function TreinoPage() {
           <h1 className="text-xl font-medium">Treino</h1>
           <p className="mt-0.5 text-sm" style={{ color: 'var(--color-text-muted)' }}>
             {tab === 'today' && (data.workouts.length ? `${data.workouts.length} treinos ativos · sua rotina da semana` : 'Sua rotina de exercícios')}
-            {tab === 'history' && `${data.recentSessions.length} sessões nas últimas 12 semanas`}
+            {tab === 'history' && `${data.recentSessions.length} ${data.recentSessions.length === 1 ? 'sessão' : 'sessões'} no histórico completo`}
             {tab === 'saved' && `${data.workouts.length} ${data.workouts.length === 1 ? 'treino ativo' : 'treinos ativos'}`}
           </p>
         </div>
@@ -429,7 +431,7 @@ export default function TreinoPage() {
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2">
               {[
-                ['Sessões', data.recentSessions.length], ['Média', `${averageDuration} min`], ['Recordes', totalPrs],
+                ['Total', data.recentSessions.length], ['Média', `${averageDuration} min`], ['Recordes', totalPrs],
               ].map(([label, value], index) => <div key={String(label)} className="rounded-lg p-2.5" style={{ backgroundColor: 'var(--color-surface)' }}><p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>{label}</p><p className="mt-0.5 text-base font-medium" style={{ color: index === 2 ? 'var(--color-fat)' : undefined }}>{value}</p></div>)}
             </div>
           </section>
@@ -437,7 +439,7 @@ export default function TreinoPage() {
           <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
             {historyFilters.map(filter => {
               const active = historyFilter === filter.id
-              return <button key={filter.id} onClick={() => setHistoryFilter(filter.id)} className="shrink-0 rounded-full border px-3.5 py-2 text-xs" style={{ borderColor: active ? 'var(--color-primary)' : 'var(--color-border)', backgroundColor: active ? 'var(--color-primary-light)' : 'var(--color-background)', color: active ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>{filter.label}</button>
+              return <button key={filter.id} onClick={() => { setHistoryFilter(filter.id); setHistoryLimit(20) }} className="shrink-0 rounded-full border px-3.5 py-2 text-xs" style={{ borderColor: active ? 'var(--color-primary)' : 'var(--color-border)', backgroundColor: active ? 'var(--color-primary-light)' : 'var(--color-background)', color: active ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>{filter.label}</button>
             })}
           </div>
 
@@ -445,7 +447,7 @@ export default function TreinoPage() {
             <div className="rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>Nenhuma sessão encontrada neste período.</div>
           ) : (
             <section className="overflow-hidden rounded-xl border" style={{ backgroundColor: 'var(--color-background)', borderColor: 'var(--color-border)' }}>
-              {filteredSessions.map((session, index) => {
+              {visibleSessions.map((session, index) => {
                 const open = openSession === session.id
                 const volume = sessionVolume(session)
                 const prs = session.sets.filter(set => set.isPersonalRecord).length
@@ -473,6 +475,7 @@ export default function TreinoPage() {
               })}
             </section>
           )}
+          {visibleSessions.length < filteredSessions.length && <button onClick={() => setHistoryLimit(limit => limit + 20)} className="w-full rounded-xl border py-3 text-sm font-medium" style={{ borderColor: 'var(--color-primary)', backgroundColor: 'var(--color-background)', color: 'var(--color-primary)' }}>Mostrar mais {Math.min(20, filteredSessions.length - visibleSessions.length)} sessões</button>}
         </div>
       )}
 
