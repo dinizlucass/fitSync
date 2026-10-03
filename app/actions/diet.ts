@@ -547,3 +547,122 @@ export async function getDietTemplatePreview(): Promise<{
 
   return { exists: true, calorieGoal: template.calorieGoal, meals }
 }
+
+export async function applyTemplateMealToDateAction(mealType: string, targetDate: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Não autenticado' }
+
+  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
+  if (!dbUser) return { success: false, error: 'Usuário não encontrado' }
+
+  const template = await prisma.dietTemplate.findUnique({
+    where: { userId: dbUser.id },
+    include: { meals: { where: { mealType: mealType as 'BREAKFAST' }, include: { items: true } } },
+  })
+  const meal = template?.meals[0]
+  if (!meal || meal.items.length === 0) return { success: false, error: 'Refeição não encontrada no cardápio' }
+
+  try {
+    const target = startOfDay(new Date(`${targetDate}T12:00:00`))
+    await prisma.$transaction(async tx => {
+      await tx.mealLog.deleteMany({ where: { userId: dbUser.id, date: target, mealType: meal.mealType } })
+      const log = await tx.mealLog.create({ data: { userId: dbUser.id, date: target, mealType: meal.mealType } })
+      await tx.mealItem.createMany({
+        data: meal.items.map(item => ({ mealLogId: log.id, foodId: item.foodId, quantityG: item.quantityG })),
+      })
+    })
+    revalidatePath('/app/dieta')
+    revalidatePath('/app/hoje')
+    return { success: true }
+  } catch (error) {
+    console.error(error)
+    return { success: false, error: 'Erro ao registrar refeição planejada' }
+  }
+}
+
+export async function copyMealsFromDateAction(sourceDate: string, targetDate: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, copied: 0, error: 'Não autenticado' }
+
+  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
+  if (!dbUser) return { success: false, copied: 0, error: 'Usuário não encontrado' }
+
+  const source = startOfDay(new Date(`${sourceDate}T12:00:00`))
+  const target = startOfDay(new Date(`${targetDate}T12:00:00`))
+  if (source.getTime() === target.getTime()) return { success: false, copied: 0, error: 'Escolha outro dia para copiar' }
+
+  const logs = await prisma.mealLog.findMany({
+    where: { userId: dbUser.id, date: { gte: source, lte: endOfDay(source) } },
+    include: { items: true },
+  })
+  if (!logs.some(log => log.items.length)) return { success: false, copied: 0, error: 'Nenhuma refeição nesse dia' }
+
+  try {
+    let copied = 0
+    await prisma.$transaction(async tx => {
+      for (const sourceLog of logs) {
+        if (sourceLog.items.length === 0) continue
+        await tx.mealLog.deleteMany({ where: { userId: dbUser.id, date: target, mealType: sourceLog.mealType } })
+        const targetLog = await tx.mealLog.create({ data: { userId: dbUser.id, date: target, mealType: sourceLog.mealType } })
+        await tx.mealItem.createMany({
+          data: sourceLog.items.map(item => ({ mealLogId: targetLog.id, foodId: item.foodId, quantityG: item.quantityG })),
+        })
+        copied += sourceLog.items.length
+      }
+    })
+    revalidatePath('/app/dieta')
+    revalidatePath('/app/hoje')
+    return { success: true, copied }
+  } catch (error) {
+    console.error(error)
+    return { success: false, copied: 0, error: 'Erro ao copiar refeições' }
+  }
+}
+
+export async function saveDayAsDietTemplateAction(sourceDate: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Não autenticado' }
+
+  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
+  if (!dbUser) return { success: false, error: 'Usuário não encontrado' }
+
+  const source = startOfDay(new Date(`${sourceDate}T12:00:00`))
+  const logs = await prisma.mealLog.findMany({
+    where: { userId: dbUser.id, date: { gte: source, lte: endOfDay(source) } },
+    include: { items: { include: { food: true } } },
+  })
+  if (!logs.some(log => log.items.length)) return { success: false, error: 'Nenhuma refeição nesse dia' }
+
+  const calorieGoal = Math.round(logs.flatMap(log => log.items).reduce((sum, item) => {
+    const ratio = item.quantityG / item.food.servingSize
+    return sum + item.food.calories * ratio
+  }, 0))
+
+  try {
+    await prisma.$transaction(async tx => {
+      const existing = await tx.dietTemplate.findUnique({ where: { userId: dbUser.id } })
+      if (existing) await tx.dietTemplateMeal.deleteMany({ where: { templateId: existing.id } })
+      const template = existing
+        ? await tx.dietTemplate.update({ where: { id: existing.id }, data: { calorieGoal, name: 'Cardápio padrão' } })
+        : await tx.dietTemplate.create({ data: { userId: dbUser.id, calorieGoal, name: 'Cardápio padrão' } })
+
+      for (const log of logs) {
+        if (log.items.length === 0) continue
+        const meal = await tx.dietTemplateMeal.create({
+          data: { templateId: template.id, mealType: log.mealType, mealName: log.mealType },
+        })
+        await tx.dietTemplateMealItem.createMany({
+          data: log.items.map(item => ({ mealId: meal.id, foodId: item.foodId, quantityG: item.quantityG })),
+        })
+      }
+    })
+    revalidatePath('/app/dieta')
+    return { success: true }
+  } catch (error) {
+    console.error(error)
+    return { success: false, error: 'Erro ao salvar cardápio' }
+  }
+}
