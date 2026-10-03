@@ -339,3 +339,32 @@ export async function deleteWorkout(workoutId: string) {
     return { error: 'Erro ao excluir treino' }
   }
 }
+
+export async function setWorkoutArchived(workoutId: string, archived: boolean) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado' }
+
+  const dbUser = await prisma.user.findUnique({ where: { supabaseId: user.id } })
+  if (!dbUser) return { error: 'Usuário não encontrado' }
+
+  try {
+    const workout = await prisma.workout.findFirst({
+      where: { id: workoutId, userId: dbUser.id },
+      select: { id: true },
+    })
+    if (!workout) return { error: 'Treino não encontrado' }
+
+    await prisma.workout.update({
+      where: { id: workout.id },
+      data: { archived },
+    })
+
+    revalidatePath('/app/treino')
+    revalidatePath('/app/hoje')
+    return { success: true }
+  } catch (error) {
+    console.error(error)
+    return { error: archived ? 'Erro ao arquivar treino' : 'Erro ao restaurar treino' }
+  }
+}
